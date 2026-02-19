@@ -74,15 +74,14 @@ A comprehensive CLI application that automates Angular project initialization wi
 
 ### Advanced Features (100% Complete)
 
-#### 8. Pre-configured Project Templates ✓
-- **Location**: `src/templates/templates.js` - `PROJECT_TEMPLATES`
-- **Templates**:
-  1. Basic SPA - Minimal setup with routing
-  2. Enterprise - NgRx, Material, ESLint, strict mode
-  3. PWA Ready - Service workers, manifest, offline support
-  4. Material Design - Angular Material components
-  5. Testing Ready - Jest, Testing Library, Spectator
-  6. Standalone Components - Modern Angular setup
+#### 8. Pre-configured Project Templates ✓ (DISABLED)
+- **Location**: `src/templates/templates.js` - `PROJECT_TEMPLATES` (removed)
+- **Status**: Feature has been disabled. Users now configure projects directly through interactive prompts:
+  - Routing selection
+  - Stylesheet format (css/scss/sass/less)
+  - Strict mode
+  - Standalone components
+- **Note**: Library bundles and configuration presets remain available
 
 #### 9. Interactive Library Search & Installation ✓
 - **Location**: `src/utils/prompt-handler.js` - `interactiveLibrarySearch()`
@@ -108,74 +107,38 @@ A comprehensive CLI application that automates Angular project initialization wi
   - Automatic major version matching for `@angular/*` and `@ngrx/*` packages
   - Compatibility warnings for potentially incompatible versions
 
-#### 10. Popular Library Bundles ✓
-- **Location**: `src/templates/templates.js` - `LIBRARY_BUNDLES`
-- **Bundles**:
-  1. UI Framework Bundle - Material + CDK + Flex Layout
-  2. State Management Bundle - NgRx suite
-  3. Form & Validation Bundle - Form utilities
-  4. Testing Bundle - Jest + Testing Library + Spectator
-  5. Performance Bundle - Universal + optimization
-  6. Authentication Bundle - Firebase integration
-  7. Utilities Bundle - Lodash, date-fns, RxJS
-  8. HTTP & API Bundle - HTTP client and tools
+#### 10. Popular Library Bundles ✓ (DISABLED)
+- **Status**: Feature has been disabled
+- **Reason**: Simplified user flow - users now add libraries individually through interactive search or manual entry
+- **Note**: `LIBRARY_BUNDLES` export removed from templates.js
 
-#### 11. Configuration Presets ✓
-- **Location**: `src/templates/templates.js` - `CONFIG_PRESETS`
-- **Presets**:
-  1. TypeScript Strict Mode - Full strict configuration
-  2. ESLint + Prettier - Linting and formatting
-  3. Husky Pre-commit Hooks - Git hooks setup
+#### 11. Configuration Presets ✓ (DISABLED)
+- **Status**: Feature has been disabled
+- **Reason**: Removed ESLint, Prettier, and Husky setup automation
+- **Note**: `CONFIG_PRESETS` export removed from templates.js
 
-#### 12. Project Structure Generator ✓
-- **Location**: `src/templates/templates.js` - `PROJECT_STRUCTURE`
-- **Features**:
-  - Standard structure (core, shared, features)
-  - Domain-driven structure
-  - Auto-create folders and README files
-  - Best practice organization
+#### 12. Project Structure Generator ✓ (DISABLED)
+- **Status**: Feature has been disabled
+- **Reason**: Removed automatic folder/file creation
+- **Note**: `PROJECT_STRUCTURE` export removed from templates.js
 
-#### 13. Environment Configuration ✓
-- **Location**: Integrated in templates
-- **Features**:
-  - Environment file templates
-  - Configuration management
-  - .env support
+#### 13. Environment Configuration ✗ (NOT IMPLEMENTED)
 
-#### 14. Testing Setup Enhancement ✓
-- **Location**: Testing bundle in templates
-- **Features**:
-  - Jest configuration
-  - Testing Library integration
-  - Spectator setup
-  - Test coverage configuration
+#### 14. Testing Setup Enhancement ✗ (NOT IMPLEMENTED)
 
-#### 15. Documentation Generation ✓
-- **Location**: `src/templates/templates.js` - `DOC_TEMPLATES`
-- **Features**:
-  - Auto-generate README.md with:
-    - Project description
-    - Installation instructions
-    - Available scripts
-    - Project structure
-    - Contributing guidelines
-  - Generate CHANGELOG.md template
+#### 15. Documentation Generation ✓ (DISABLED)
+- **Status**: Feature has been disabled
+- **Reason**: Removed automatic README.md and CHANGELOG.md generation
+- **Note**: `DOC_TEMPLATES` export removed from templates.js
 
-#### 16. Git Integration ✓
-- **Location**: `src/utils/file-utils.js`
-- **Features**:
-  - Initialize git repository
-  - Create .gitignore with Angular entries
-  - Initial commit with message
-  - Git configuration templates
+#### 16. Git Integration ✓ (DISABLED)
+- **Status**: Feature has been disabled
+- **Reason**: Removed automatic git initialization, .gitignore creation, and commits
+- **Note**: `GIT_CONFIG` export removed from templates.js
 
-#### 17. Best Practices Enforcement ✓
-- **Features**:
-  - Angular strict mode option
-  - TypeScript strict configuration
-  - ESLint rules
-  - Prettier formatting
-  - Pre-commit hooks
+#### 17. Best Practices Enforcement ✓ (DISABLED)
+- **Status**: Feature has been disabled
+- **Reason**: Removed ESLint, Prettier, and pre-commit hooks setup
 
 #### 18. Interactive Dashboard ✓
 - **Location**: `src/runner.js` - End of flow
@@ -277,14 +240,13 @@ flowchart TD
     E --> F["7. Check Node.js Compatibility"]
     F --> G{"9. Compatible?"}
     
-    G -->|"Yes"| H["11. Configure Project<br/>(Name, Location)"]
+    G -->|"Yes"| H["11. Configure Project<br/>(Name, Location, Options)"]
     G -->|"No - nvm installed"| I["Switch/Install Node Version"]
     G -->|"No - nvm not installed"| J["Guide Installation"]
     I --> H
     J --> H
     
-    H --> K["13. Select Template<br/>(Basic, Enterprise, PWA, etc.)"]
-    K --> L{"15. Library Selection"}
+    H --> L{"13. Library Selection"}
     
     L -->|"Interactive Search"| M["Search with autocomplete"]
     L -->|"Manual Entry"| N["Enter package names"]

@@ -6,8 +6,7 @@ import { getAngularVersions, getNodeRequirementsForAngular, getMajorVersions, ge
 import { checkNodeCompatibility, displayCompatibilityStatus, findCompatibleVersions, getRecommendedNodeVersion, resolveLibraryVersionsAsync } from './utils/compatibility.js';
 import { createAngularProject, installPackages, runNpmInstall, installNodeWithWinget, displayNvmInstallGuide } from './utils/installer.js';
 import { interactiveLibrarySearch, simpleLibraryInput, askLibrarySearchPreference } from './utils/prompt-handler.js';
-import { PROJECT_TEMPLATES, LIBRARY_BUNDLES, CONFIG_PRESETS, PROJECT_STRUCTURE, GIT_CONFIG, DOC_TEMPLATES } from './templates/templates.js';
-import { initGitRepo, createGitignore, createInitialCommit, createProjectFolders, createProjectFiles, createReadme, createChangelog, validateDirectoryName, ensureDirectory, updatePackageJsonScripts } from './utils/file-utils.js';
+import { validateDirectoryName } from './utils/file-utils.js';
 import { saveProfile, loadProfile, listProfiles, displayProfileInfo } from './utils/profile-manager.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -260,49 +259,34 @@ export async function runCli() {
 
         const projectPath = path.join(config.location, config.projectName);
 
-        // Step 8: Select template (if not from profile)
-        if (!config.template) {
-            config.template = await select({
-                message: 'Select project template:',
+        // Step 8: Project configuration (if not from profile)
+        if (!config.options) {
+            const routing = await confirm({
+                message: 'Enable routing?',
+                default: true
+            });
+
+            const style = await select({
+                message: 'Select stylesheet format:',
                 choices: [
-                    ...Object.entries(PROJECT_TEMPLATES).map(([key, template]) => ({
-                        name: `${template.name} - ${template.description}`,
-                        value: key
-                    })),
-                    { name: 'Custom (configure manually)', value: 'custom' }
+                    { name: 'css', value: 'css' },
+                    { name: 'scss', value: 'scss' },
+                    { name: 'sass', value: 'sass' },
+                    { name: 'less', value: 'less' }
                 ]
             });
 
-            if (config.template === 'custom') {
-                const routing = await confirm({
-                    message: 'Enable routing?',
-                    default: true
-                });
+            const strict = await confirm({
+                message: 'Enable strict mode?',
+                default: true
+            });
 
-                const style = await select({
-                    message: 'Select stylesheet format:',
-                    choices: [
-                        { name: 'css', value: 'css' },
-                        { name: 'scss', value: 'scss' },
-                        { name: 'sass', value: 'sass' },
-                        { name: 'less', value: 'less' }
-                    ]
-                });
+            const standalone = await confirm({
+                message: 'Use standalone components?',
+                default: false
+            });
 
-                const strict = await confirm({
-                    message: 'Enable strict mode?',
-                    default: true
-                });
-
-                const standalone = await confirm({
-                    message: 'Use standalone components?',
-                    default: false
-                });
-
-                config.options = { routing, style, strict, standalone };
-            } else {
-                config.options = PROJECT_TEMPLATES[config.template].options;
-            }
+            config.options = { routing, style, strict, standalone };
         }
 
         // Step 9: Library selection (if not from profile)
@@ -314,64 +298,13 @@ export async function runCli() {
                 config.libraries = await interactiveLibrarySearch(config.angularVersion);
             } else if (libraryMethod === 'manual') {
                 config.libraries = await simpleLibraryInput(config.angularVersion);
-            } else if (libraryMethod === 'bundles') {
-                const selectedBundles = await checkbox({
-                    message: 'Select library bundles:',
-                    choices: Object.entries(LIBRARY_BUNDLES).map(([key, bundle]) => ({
-                        name: `${bundle.name} - ${bundle.description}`,
-                        value: key
-                    }))
-                });
-
-                for (const bundleKey of selectedBundles) {
-                    const bundle = LIBRARY_BUNDLES[bundleKey];
-                    if (bundle.packages) {
-                        config.libraries.push(...bundle.packages);
-                    }
-                    // Also include devPackages from bundles
-                    if (bundle.devPackages) {
-                        config.libraries.push(...bundle.devPackages.map(pkg => ({
-                            ...pkg,
-                            isDev: true
-                        })));
-                    }
-                }
             }
-
-            // Add template-specific libraries
-            if (config.template !== 'custom' && PROJECT_TEMPLATES[config.template].packages) {
-                const templateLibs = PROJECT_TEMPLATES[config.template].packages.map(name => ({
-                    name,
-                    version: 'latest'
-                }));
-                config.libraries.push(...templateLibs);
-            }
-
-            // Add template-specific dev packages
-            if (config.template !== 'custom' && PROJECT_TEMPLATES[config.template].devPackages) {
-                const templateDevLibs = PROJECT_TEMPLATES[config.template].devPackages.map(name => ({
-                    name,
-                    version: 'latest',
-                    isDev: true
-                }));
-                config.libraries.push(...templateDevLibs);
-            }
+            // Note: Library bundles feature has been disabled
         }
 
-        // Step 10: Additional features (if not from profile)
-        if (!config.features) {
-            config.features = await checkbox({
-                message: 'Select additional features:',
-                choices: [
-                    { name: 'Git initialization', value: 'git', checked: true },
-                    { name: 'Create project structure', value: 'structure', checked: true },
-                    { name: 'Generate README.md', value: 'readme', checked: true },
-                    { name: 'Generate CHANGELOG.md', value: 'changelog', checked: false },
-                    { name: 'ESLint + Prettier setup', value: 'eslint', checked: false },
-                    { name: 'Husky pre-commit hooks', value: 'husky', checked: false }
-                ]
-            });
-        }
+        // Step 10: Additional features (disabled)
+        // Note: Additional features (git, structure, docs, linting) have been disabled
+        config.features = [];
 
         // Step 11: Save profile option
         const shouldSaveProfile = await confirm({
@@ -394,9 +327,11 @@ export async function runCli() {
         console.log(chalk.white('Project Name:     ') + chalk.green(config.projectName));
         console.log(chalk.white('Location:         ') + chalk.cyan(projectPath));
         console.log(chalk.white('Angular Version:  ') + chalk.green(config.angularVersion));
-        console.log(chalk.white('Template:         ') + chalk.cyan(config.template));
+        console.log(chalk.white('Style:            ') + chalk.cyan(config.options.style));
+        console.log(chalk.white('Routing:          ') + chalk.cyan(config.options.routing ? 'Yes' : 'No'));
+        console.log(chalk.white('Strict Mode:      ') + chalk.cyan(config.options.strict ? 'Yes' : 'No'));
+        console.log(chalk.white('Standalone:       ') + chalk.cyan(config.options.standalone ? 'Yes' : 'No'));
         console.log(chalk.white('Libraries:        ') + chalk.cyan(config.libraries.length));
-        console.log(chalk.white('Features:         ') + chalk.cyan(config.features.join(', ')));
         console.log(chalk.gray('━'.repeat(50)) + '\n');
 
         const shouldCreate = await confirm({
@@ -484,52 +419,7 @@ export async function runCli() {
         console.log(chalk.bold.cyan('\n📥 Installing dependencies...\n'));
         await runNpmInstall(projectPath);
 
-        // Step 16: Create project structure
-        if (config.features.includes('structure')) {
-            console.log(chalk.bold.cyan('\n📁 Creating project structure...\n'));
-            await createProjectFolders(projectPath, PROJECT_STRUCTURE.standard.folders);
-            await createProjectFiles(projectPath, PROJECT_STRUCTURE.standard.files);
-        }
-
-        // Step 17: Initialize Git
-        if (config.features.includes('git')) {
-            console.log(chalk.bold.cyan('\n🔧 Initializing Git repository...\n'));
-            await initGitRepo(projectPath);
-            await createGitignore(projectPath, GIT_CONFIG.gitignore);
-        }
-
-        // Step 18: Generate documentation
-        if (config.features.includes('readme')) {
-            console.log(chalk.bold.cyan('\n📝 Generating README.md...\n'));
-            const readmeContent = DOC_TEMPLATES.readme(config.projectName, 'An Angular application created with Angular Project Automator');
-            await createReadme(projectPath, readmeContent);
-        }
-
-        if (config.features.includes('changelog')) {
-            await createChangelog(projectPath, DOC_TEMPLATES.changelog);
-        }
-
-        // Step 19: Setup ESLint
-        if (config.features.includes('eslint')) {
-            console.log(chalk.bold.cyan('\n🔧 Setting up ESLint + Prettier...\n'));
-            const eslintPackages = CONFIG_PRESETS.eslint.packages.map(p => p);
-            await installPackages(eslintPackages, projectPath, true);
-            await createProjectFiles(projectPath, CONFIG_PRESETS.eslint.files);
-        }
-
-        // Step 20: Setup Husky
-        if (config.features.includes('husky')) {
-            console.log(chalk.bold.cyan('\n🐶 Setting up Husky...\n'));
-            const huskyPackages = CONFIG_PRESETS.husky.devPackages.map(p => p);
-            await installPackages(huskyPackages, projectPath, true);
-            await updatePackageJsonScripts(projectPath, CONFIG_PRESETS.husky.scripts);
-        }
-
-        // Step 21: Create initial commit
-        if (config.features.includes('git')) {
-            console.log(chalk.bold.cyan('\n📝 Creating initial commit...\n'));
-            await createInitialCommit(projectPath, GIT_CONFIG.initialCommitMessage);
-        }
+        // Note: Additional features (project structure, git, docs, eslint, husky) have been disabled
 
         // Step 22: Display success message
         console.log(chalk.bold.green('\n✅ Project created successfully! 🎉\n'));

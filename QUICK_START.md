@@ -35,10 +35,9 @@ The CLI will guide you through:
    - Select patch version (e.g., 17.1.0, 17.1.1)
 3. **Compatibility Check** - Ensures your Node.js version is compatible
 4. **Project Configuration** - Name your project and choose location
-5. **Template Selection** - Pick a pre-configured template or customize
+5. **Project Options** - Configure routing, styles, strict mode, and standalone components
 6. **Library Search** - Add additional npm packages (with auto version resolution)
-7. **Additional Features** - Git, documentation, linting, etc.
-8. **Save Profile** - Optionally save your configuration for reuse
+7. **Save Profile** - Optionally save your configuration for reuse
 
 ### Step 3: Start Developing
 
@@ -51,25 +50,23 @@ Open [http://localhost:4200](http://localhost:4200) in your browser!
 
 ## 🎯 Common Use Cases
 
-### Use Case 1: Enterprise Project with NgRx and Material
+### Use Case 1: Project with Libraries
 
 ```bash
 ng-init
 # Select Angular 17
-# Choose "Enterprise" template
-# Add any additional libraries
-# Enable Git, README, ESLint
-# Save as "enterprise-template" profile
+# Configure project options
+# Search for @angular/material, @ngrx/store, etc.
+# Save as "my-setup" profile
 ```
 
-### Use Case 2: Quick PWA Setup
+### Use Case 2: Quick Basic Setup
 
 ```bash
 ng-init
 # Select latest Angular
-# Choose "PWA Ready" template
-# Skip additional libraries
-# Enable Git and README
+# Configure project options with routing
+# Skip library installation
 ```
 
 ### Use Case 3: Reuse Saved Profile
@@ -126,48 +123,9 @@ When you create a project, you get:
 - ✅ All dependencies installed
 - ✅ TypeScript configuration
 - ✅ Development server ready
+- ✅ Routing configured (if enabled)
+- ✅ Stylesheet setup (CSS/SCSS/SASS/LESS)
 
-### With Templates
-- ✅ Pre-configured routing
-- ✅ Stylesheet setup (CSS/SCSS)
-- ✅ Template-specific libraries
-- ✅ Best practices built-in
-
-### With Features Enabled
-- ✅ Git repository initialized
-- ✅ Project folder structure
-- ✅ README.md with documentation
-- ✅ ESLint and Prettier configured
-- ✅ Pre-commit hooks with Husky
-
-## 🎨 Available Templates
-
-1. **Basic SPA** - Minimal setup with routing
-2. **Enterprise** - NgRx, Material, ESLint, strict mode
-3. **PWA Ready** - Service workers and offline support
-4. **Material Design** - Angular Material components
-5. **Testing Ready** - Jest and Testing Library
-6. **Standalone** - Modern standalone components
-
-## 📦 Library Bundles
-
-- **UI Framework** - Material + CDK + Flex Layout
-- **State Management** - NgRx complete suite
-- **Forms** - Form utilities and validators
-- **Testing** - Jest + Testing Library + Spectator
-- **Performance** - Universal + optimization
-- **Authentication** - Firebase integration
-- **Utilities** - Lodash, date-fns, RxJS
-- **HTTP & API** - HTTP client and tools
-
-## Dynamic Version Resolution
-
-The CLI automatically resolves compatible library versions:
-- ✅ Checks peer dependencies from npm registry
-- ✅ Matches major versions for `@angular/*` packages
-- ✅ Matches major versions for `@ngrx/*` packages
-- ✅ Displays adjusted versions during installation
-- ✅ Shows warnings for potentially incompatible packages
 
 ## 🐛 Troubleshooting
 

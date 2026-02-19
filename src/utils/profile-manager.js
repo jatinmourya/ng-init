@@ -118,7 +118,6 @@ export async function getProfileDetails(name) {
     return {
         name: name,
         angularVersion: profile.angularVersion,
-        template: profile.template,
         libraries: profile.libraries?.length || 0,
         createdAt: profile.createdAt,
         updatedAt: profile.updatedAt
@@ -190,8 +189,9 @@ export function displayProfileInfo(name, profile) {
         console.log(chalk.white('Angular Version: ') + chalk.green(profile.angularVersion));
     }
     
+    // Note: template field is deprecated but may exist in old profiles
     if (profile.template) {
-        console.log(chalk.white('Template:        ') + chalk.cyan(profile.template));
+        console.log(chalk.yellow('Template:        ') + chalk.gray(`${profile.template} (deprecated, will use options instead)`));
     }
     
     if (profile.libraries && profile.libraries.length > 0) {

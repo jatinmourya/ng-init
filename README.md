@@ -19,14 +19,6 @@ A comprehensive command-line interface (CLI) tool designed to automate and strea
 
 ### Advanced Features
 
-- **🎨 Pre-configured Project Templates**
-  - Basic SPA (Minimal setup)
-  - Enterprise (NgRx, Material, ESLint)
-  - PWA Ready (Service workers, offline support)
-  - Material Design (Angular Material components)
-  - Testing Ready (Jest, Testing Library)
-  - Standalone Components (Modern Angular)
-
 - **🔍 Interactive Library Search & Installation**
   - Real-time npm package search with autocomplete
   - Package validation and metadata display
@@ -40,41 +32,6 @@ A comprehensive command-line interface (CLI) tool designed to automate and strea
   - Matches major versions for Angular-scoped packages
   - Displays compatibility warnings
   - Caches npm responses for performance
-
-- **📦 Popular Library Bundles**
-  - UI Framework Bundle (Material + CDK + Flex Layout)
-  - State Management Bundle (NgRx suite)
-  - Form & Validation Bundle
-  - Testing Bundle (Jest + Testing Library)
-  - Performance Bundle (Universal + optimization)
-  - Authentication Bundle (Firebase integration)
-  - Utilities Bundle (Lodash, date-fns, RxJS)
-  - HTTP & API Bundle
-
-- **🔧 Configuration Presets**
-  - TypeScript strict mode
-  - ESLint + Prettier setup
-  - Husky pre-commit hooks
-  - Custom configurations
-
-- **📁 Project Structure Generator**
-  - Standard Angular structure (core, shared, features)
-  - Domain-driven structure
-  - Automatic folder and file generation
-
-- **🔐 Environment Configuration**
-  - Environment file templates
-  - Configuration management
-
-- **🚀 Git Integration**
-  - Initialize repository
-  - Create .gitignore with Angular-specific entries
-  - Initial commit creation
-
-- **📚 Documentation Generation**
-  - Auto-generate README.md
-  - CHANGELOG.md template
-  - Project structure documentation
 
 - **💾 Profile Management**
   - Save configurations as reusable profiles
@@ -121,10 +78,8 @@ This starts the interactive CLI that guides you through:
 2. Angular version selection
 3. Node.js compatibility check and resolution
 4. Project configuration
-5. Template selection
-6. Library search and installation
-7. Additional features setup
-8. Profile saving option
+5. Library search and installation
+6. Profile saving option
 
 ### Check System Versions
 
@@ -184,16 +139,14 @@ ng-init examples
 
 ## 🎯 Usage Examples
 
-### Example 1: Create Enterprise Project with Material
+### Example 1: Create Project with Libraries
 
 1. Run `ng-init`
 2. Select Angular version 17
-3. Choose "Enterprise" template
+3. Configure project options (routing, style, etc.)
 4. Select "Interactive search" for libraries
-5. Search and add additional packages
-6. Enable Git initialization
-7. Enable README generation
-8. Save as profile for future use
+5. Search and add packages like @angular/material, @ngrx/store
+6. Save as profile for future use
 
 ### Example 2: Quick Setup with Saved Profile
 
@@ -203,15 +156,13 @@ ng-init examples
 4. Confirm configuration
 5. Project is created automatically
 
-### Example 3: PWA Project with Testing
+### Example 3: Quick Project Setup
 
 1. Run `ng-init`
 2. Select latest Angular version
-3. Choose "PWA Ready" template
-4. Select "Testing Bundle" from bundles
-5. Enable ESLint + Prettier
-6. Enable Husky hooks
-7. Project created with complete testing setup
+3. Configure project options
+4. Skip library installation
+5. Project created with basic Angular setup
 
 ## 📊 CLI Application Flow Diagram
 
@@ -269,26 +220,15 @@ flowchart TB
         BB -->|"Custom"| DD["Enter custom path"]
         CC --> EE["Project path confirmed"]
         DD --> EE
-    end
-
-    subgraph TEMPLATE["🎨 Template Selection"]
-        EE --> FF{"Select template"}
-        FF -->|"Basic SPA"| GG["Minimal setup"]
-        FF -->|"Enterprise"| HH["NgRx + Material + ESLint"]
-        FF -->|"PWA Ready"| II["Service workers + offline"]
-        FF -->|"Material Design"| JJ["Angular Material components"]
-        FF -->|"Testing Ready"| KK["Jest + Testing Library"]
-        FF -->|"Standalone"| LL["Modern standalone components"]
-        FF -->|"Custom"| MM["Configure manually"]
-        MM --> NN["Enable routing?"]
-        NN --> OO["Select stylesheet format"]
-        OO --> PP["Enable strict mode?"]
-        PP --> QQ["Use standalone components?"]
-        GG & HH & II & JJ & KK & LL & QQ --> RR["Template configured"]
+        EE --> FF["Enable routing?"]
+        FF --> GG["Select stylesheet format"]
+        GG --> HH["Enable strict mode?"]
+        HH --> II["Use standalone components?"]
+        II --> JJ["Project configuration complete"]
     end
 
     subgraph LIBRARY["📚 Library Selection"]
-        RR --> SS{"Library selection method?"}
+        JJ --> SS{"Library selection method?"}
         SS -->|"Interactive Search"| TT["Search npm packages"]
         TT --> UU["Select package"]
         UU --> VV["Choose version method"]
@@ -303,26 +243,11 @@ flowchart TB
         SS -->|"Manual Input"| CCC["Enter package names"]
         CCC --> BBB
         
-        SS -->|"Library Bundles"| DDD["Select predefined bundles"]
-        DDD --> EEE["UI Framework / State Mgmt /<br/>Forms / Testing / etc."]
-        EEE --> BBB
-        
         SS -->|"Skip"| BBB
     end
 
-    subgraph FEATURES["⚙️ Additional Features"]
-        BBB --> FFF["Select features"]
-        FFF --> GGG["☑️ Git initialization"]
-        FFF --> HHH["☑️ Project structure"]
-        FFF --> III["☑️ README.md"]
-        FFF --> JJJ["☐ CHANGELOG.md"]
-        FFF --> KKK["☐ ESLint + Prettier"]
-        FFF --> LLL["☐ Husky hooks"]
-        GGG & HHH & III & JJJ & KKK & LLL --> MMM["Features configured"]
-    end
-
     subgraph SAVE["💾 Save Profile"]
-        MMM --> NNN{"Save as profile?"}
+        BBB --> NNN{"Save as profile?"}
         NNN -->|"Yes"| OOO["Enter profile name"]
         OOO --> PPP["Profile saved"]
         PPP --> QQQ["Display configuration summary"]
@@ -340,29 +265,7 @@ flowchart TB
         UUU --> VVV["Resolve library versions"]
         VVV --> WWW["Install additional libraries"]
         WWW --> XXX["Run npm install"]
-        XXX --> YYY{"Structure enabled?"}
-        YYY -->|"Yes"| ZZZ["Create project folders & files"]
-        YYY -->|"No"| AAAA
-        ZZZ --> AAAA{"Git enabled?"}
-        AAAA -->|"Yes"| BBBB["Initialize Git repo"]
-        BBBB --> CCCC["Create .gitignore"]
-        AAAA -->|"No"| DDDD
-        CCCC --> DDDD{"README enabled?"}
-        DDDD -->|"Yes"| EEEE["Generate README.md"]
-        DDDD -->|"No"| FFFF
-        EEEE --> FFFF{"Changelog enabled?"}
-        FFFF -->|"Yes"| GGGG["Generate CHANGELOG.md"]
-        FFFF -->|"No"| HHHH
-        GGGG --> HHHH{"ESLint enabled?"}
-        HHHH -->|"Yes"| IIII["Setup ESLint + Prettier"]
-        HHHH -->|"No"| JJJJ
-        IIII --> JJJJ{"Husky enabled?"}
-        JJJJ -->|"Yes"| KKKK["Setup Husky hooks"]
-        JJJJ -->|"No"| LLLL
-        KKKK --> LLLL{"Git enabled?"}
-        LLLL -->|"Yes"| MMMM["Create initial commit"]
-        LLLL -->|"No"| NNNN
-        MMMM --> NNNN["🎉 Success!"]
+        XXX --> NNNN["🎉 Success!"]
     end
 
     subgraph END["🏁 Complete"]
@@ -377,9 +280,7 @@ flowchart TB
     style ANGULAR fill:#fff3e0
     style NODE fill:#ffebee
     style PROJECT fill:#e8f5e9
-    style TEMPLATE fill:#fce4ec
     style LIBRARY fill:#e0f2f1
-    style FEATURES fill:#fff8e1
     style SAVE fill:#f3e5f5
     style CONFIRM fill:#e8eaf6
     style CREATE fill:#e3f2fd
@@ -396,13 +297,11 @@ flowchart TB
 | 4 | **Angular Version** | Three-tier selection: Major → Minor → Patch version |
 | 5 | **Node.js Check** | Validates and resolves Node.js compatibility |
 | 6 | **Project Setup** | Configure project name and location |
-| 7 | **Template** | Choose from 6 pre-configured templates or custom setup |
-| 8 | **Libraries** | Interactive search, manual input, or bundled packages |
-| 9 | **Features** | Select Git, structure, docs, linting, hooks |
-| 10 | **Save Profile** | Optionally save configuration for reuse |
-| 11 | **Confirm** | Review summary and confirm creation |
-| 12 | **Create** | Execute all selected operations |
-| 13 | **Complete** | Display success message and next steps |
+| 7 | **Libraries** | Interactive search or manual input |
+| 8 | **Save Profile** | Optionally save configuration for reuse |
+| 9 | **Confirm** | Review summary and confirm creation |
+| 10 | **Create** | Execute all selected operations |
+| 11 | **Complete** | Display success message and next steps |
 
 ## 🏗️ Project Structure
 
@@ -419,38 +318,12 @@ ng-init/
 │   │   ├── prompt-handler.js     # Interactive prompts
 │   │   ├── file-utils.js         # File operations
 │   │   └── profile-manager.js    # Profile management
-│   └── templates/             # Project templates
-│       └── templates.js          # Template definitions
+│   └── templates/             # Configuration templates (disabled)
+│       └── templates.js          # Template definitions (all features disabled)
 ├── build.js                   # Build script for production
 ├── package.json
 └── README.md
 ```
-
-## 🔧 Configuration
-
-### Project Templates
-
-The CLI includes several pre-configured templates:
-
-- **basic**: Minimal Angular setup with routing
-- **enterprise**: Complete setup with NgRx, Material, ESLint
-- **pwa**: Progressive Web App ready
-- **material**: Angular Material UI components
-- **testing**: Jest and Testing Library setup
-- **standalone**: Modern standalone components
-
-### Library Bundles
-
-Pre-configured library combinations for common use cases:
-
-- **uiFramework**: Angular Material suite
-- **stateManagement**: NgRx complete setup
-- **forms**: Form utilities and validators
-- **testing**: Complete testing stack
-- **performance**: Optimization tools
-- **authentication**: Auth integration
-- **utilities**: Common utility libraries
-- **http**: HTTP and API tools
 
 ## 🤝 Contributing
 

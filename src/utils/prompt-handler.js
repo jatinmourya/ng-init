@@ -301,7 +301,6 @@ export async function askLibrarySearchPreference() {
         choices: [
             { name: 'Interactive search with autocomplete (Recommended)', value: 'interactive' },
             { name: 'Manual entry', value: 'manual' },
-            { name: 'Choose from popular bundles', value: 'bundles' },
             { name: 'Skip for now', value: 'skip' }
         ],
         default: 'interactive'

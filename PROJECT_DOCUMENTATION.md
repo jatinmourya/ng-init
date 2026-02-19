@@ -75,13 +75,16 @@ Interactive prompts:
 
 ## Suggested Additional Features
 
-### 🎨 **Pre-configured Project Templates**
-Offer common project setups:
-- **Basic SPA**: Minimal setup with routing
-- **Enterprise**: NgRx, Angular Material, strict mode, ESLint
-- **PWA Ready**: Service workers, manifest, offline support
-- **Microfrontend**: Module federation configuration
-- **Full-Stack**: NestJS backend integration ready
+### 🎨 **Pre-configured Project Templates** (DISABLED)
+This feature has been disabled in favor of direct project configuration through interactive prompts.
+
+Users now configure projects by answering specific questions:
+- Enable routing?
+- Select stylesheet format (css/scss/sass/less)
+- Enable strict mode?
+- Use standalone components?
+
+**Note**: Library bundles and configuration presets remain available for quick setups.
 
 ### 📦 **Interactive Library Search & Installation**
 **Smart npm Package Discovery:**
@@ -216,7 +219,7 @@ After project creation:
 - Notify about new Angular versions
 - Security advisory alerts for dependencies
 
-### 💾 **Profile/Template Saving**
+### 💾 **Profile Saving**
 - Allow users to save their configuration as a profile
 - Reuse saved profiles for future projects
 - Share profiles with team (export/import JSON)
