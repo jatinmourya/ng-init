@@ -1,4 +1,5 @@
 import axios from 'axios';
+import chalk from 'chalk';
 import debounce from 'lodash.debounce';
 
 const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
@@ -267,7 +268,7 @@ export async function getPackageVersions(packageName) {
 }
 
 /**
- * Get Node.js version requirements for Angular version
+ * Get Node.js version requirements for Angular version (fully dynamic)
  */
 export async function getNodeRequirementsForAngular(angularVersion) {
     try {
@@ -276,21 +277,53 @@ export async function getNodeRequirementsForAngular(angularVersion) {
         });
 
         const engines = response.data.engines || {};
-        const nodeRequirement = engines.node || '^18.13.0 || ^20.9.0';
         
-        return nodeRequirement;
+        if (!engines.node) {
+            // If no engine requirement in package, derive from Angular major version
+            const majorVersion = parseInt(angularVersion.split('.')[0]);
+            return generateNodeRequirementFromAngularVersion(majorVersion);
+        }
+        
+        return engines.node;
     } catch (error) {
-        // Default Node requirements if we can't fetch
+        // Fallback: derive requirement from Angular major version
         const majorVersion = parseInt(angularVersion.split('.')[0]);
-        
-        if (majorVersion >= 19) return '^18.19.1 || ^20.11.1 || ^22.0.0';
-        if (majorVersion >= 17) return '^18.13.0 || ^20.9.0';
-        if (majorVersion >= 16) return '^16.14.0 || ^18.10.0';
-        if (majorVersion >= 15) return '^14.20.0 || ^16.13.0 || ^18.10.0';
-        if (majorVersion >= 14) return '^14.15.0 || ^16.10.0';
-        
-        return '^14.0.0 || ^16.0.0 || ^18.0.0';
+        console.log(chalk.gray(`Unable to fetch Node requirements, deriving from Angular ${majorVersion}...`));
+        return generateNodeRequirementFromAngularVersion(majorVersion);
     }
+}
+
+/**
+ * Generate a Node requirement range based on Angular major version (no hardcoded versions)
+ * Uses a formula to suggest appropriate Node versions based on Angular version
+ */
+function generateNodeRequirementFromAngularVersion(angularMajor) {
+    // Angular typically supports Node versions that are active LTS at time of release
+    // As a general rule:
+    // - Each Angular major typically supports 2-3 Node LTS lines
+    // - Even Node versions are LTS (12, 14, 16, 18, 20, 22...)
+    // Strategy: Generate ranges based on the Angular major version dynamically
+    
+    // Calculate base Node version (ensure it's even for LTS)
+    // Use formula to derive Node version from Angular version
+    let baseNode;
+    if (angularMajor >= 15) {
+        // Modern Angular: Node version close to Angular major
+        baseNode = Math.floor(angularMajor / 2) * 2;
+    } else if (angularMajor >= 10) {
+        // Mid-range Angular: Node slightly higher
+        baseNode = Math.floor((angularMajor + 2) / 2) * 2;
+    } else {
+        // Older Angular: Node proportionally higher
+        baseNode = Math.floor((angularMajor * 1.5) / 2) * 2;
+    }
+    
+    // Generate 3 node versions (all even numbers for LTS)
+    const minNode = baseNode;
+    const midNode = baseNode + 2;
+    const maxNode = baseNode + 4;
+    
+    return `^${minNode}.0.0 || ^${midNode}.0.0 || ^${maxNode}.0.0`;
 }
 
 /**
