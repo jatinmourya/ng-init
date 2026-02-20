@@ -2,7 +2,7 @@
 
 ## 🎯 Project Overview
 
-A comprehensive CLI application that automates Angular project initialization with intelligent version management, dynamic library version resolution, interactive library search, and complete prerequisite handling. This implementation includes **ALL** features from the PROJECT_DOCUMENTATION.md file plus advanced dynamic compatibility features.
+A comprehensive CLI application that automates Angular project initialization with intelligent version management, dynamic library version resolution, interactive library search, and complete prerequisite handling. Most core features are implemented; several previously-proposed automation items (project templates, automatic presets, bundles, and automatic documentation/git scaffolding) are intentionally disabled in this codebase and projects are configured via interactive prompts.
 
 ## ✅ Implemented Features
 
@@ -74,14 +74,10 @@ A comprehensive CLI application that automates Angular project initialization wi
 
 ### Advanced Features (100% Complete)
 
-#### 8. Pre-configured Project Templates ✓ (DISABLED)
-- **Location**: `src/templates/templates.js` - `PROJECT_TEMPLATES` (removed)
-- **Status**: Feature has been disabled. Users now configure projects directly through interactive prompts:
-  - Routing selection
-  - Stylesheet format (css/scss/sass/less)
-  - Strict mode
-  - Standalone components
-- **Note**: Library bundles and configuration presets remain available
+#### 8. Pre-configured Project Templates (DISABLED)
+ - **Location**: `src/templates/templates.js`
+ - **Status**: Feature is disabled; `templates.js` has been retained for backward compatibility but
+   exports nothing. Users configure projects through the interactive prompts in `runner.js`.
 
 #### 9. Interactive Library Search & Installation ✓
 - **Location**: `src/utils/prompt-handler.js` - `interactiveLibrarySearch()`
@@ -107,34 +103,25 @@ A comprehensive CLI application that automates Angular project initialization wi
   - Automatic major version matching for `@angular/*` and `@ngrx/*` packages
   - Compatibility warnings for potentially incompatible versions
 
-#### 10. Popular Library Bundles ✓ (DISABLED)
-- **Status**: Feature has been disabled
-- **Reason**: Simplified user flow - users now add libraries individually through interactive search or manual entry
-- **Note**: `LIBRARY_BUNDLES` export removed from templates.js
+#### 10. Popular Library Bundles (DISABLED)
+ - **Status**: Bundles are not provided by the CLI. Libraries are added interactively or manually.
 
-#### 11. Configuration Presets ✓ (DISABLED)
-- **Status**: Feature has been disabled
-- **Reason**: Removed ESLint, Prettier, and Husky setup automation
-- **Note**: `CONFIG_PRESETS` export removed from templates.js
+#### 11. Configuration Presets (DISABLED)
+ - **Status**: Presets are not applied automatically by the CLI.
 
-#### 12. Project Structure Generator ✓ (DISABLED)
-- **Status**: Feature has been disabled
-- **Reason**: Removed automatic folder/file creation
-- **Note**: `PROJECT_STRUCTURE` export removed from templates.js
+#### 12. Project Structure Generator (DISABLED)
+ - **Status**: The CLI defers to `ng new` for project scaffolding; no additional project-structure generator is run.
 
 #### 13. Environment Configuration ✗ (NOT IMPLEMENTED)
 
 #### 14. Testing Setup Enhancement ✗ (NOT IMPLEMENTED)
 
-#### 15. Documentation Generation ✓ (DISABLED)
-- **Status**: Feature has been disabled
-- **Reason**: Removed automatic README.md and CHANGELOG.md generation
-- **Note**: `DOC_TEMPLATES` export removed from templates.js
+#### 15. Documentation Generation (DISABLED)
+ - **Status**: Automatic documentation generation is not performed by the CLI.
 
-#### 16. Git Integration ✓ (DISABLED)
-- **Status**: Feature has been disabled
-- **Reason**: Removed automatic git initialization, .gitignore creation, and commits
-- **Note**: `GIT_CONFIG` export removed from templates.js
+#### 16. Git Integration (NOT AUTOMATIC)
+ - **Status**: Helper functions for Git exist in `src/utils/file-utils.js` but the CLI does not automatically
+   initialize repositories or create commits as part of project creation.
 
 #### 17. Best Practices Enforcement ✓ (DISABLED)
 - **Status**: Feature has been disabled
@@ -200,6 +187,10 @@ ng-init/
 - `ng-init` - Create new Angular project (interactive)
 - `ng-init create` - Alias for main command
 - `ng-init check` - System version check
+
+Notes:
+- Profiles are stored locally at `~/.ng-init/profiles.json`.
+- Templates/bundles/presets are disabled; use interactive prompts to configure projects.
 
 ### Profile Commands
 - `ng-init profile list` - List all saved profiles

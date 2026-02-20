@@ -37,7 +37,7 @@ A comprehensive command-line interface (CLI) tool designed to automate and strea
   - Save configurations as reusable profiles
   - Load saved profiles for quick setup
   - Export/import profiles for sharing
-  - Cloud-ready profile system
+    - Local profile storage (saved to `~/.ng-init`)
 
 ## 📋 Prerequisites
 

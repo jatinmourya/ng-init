@@ -84,7 +84,8 @@ Users now configure projects by answering specific questions:
 - Enable strict mode?
 - Use standalone components?
 
-**Note**: Library bundles and configuration presets remain available for quick setups.
+**Note**: Project templates, library bundles and configuration presets have been intentionally disabled
+in this codebase; users configure projects directly through the interactive prompts instead.
 
 ### 📦 **Interactive Library Search & Installation**
 **Smart npm Package Discovery:**
@@ -132,22 +133,13 @@ CLI: ✓ Added @angular/material@17.0.2
      Add another library? (Y/n)
 ```
 
-### 📦 **Popular Library Bundles**
-Quick-install common library combinations:
-- **UI Framework Bundle**: Angular Material + CDK + Flex Layout
-- **State Management Bundle**: NgRx + Entity + Effects + DevTools
-- **Form & Validation Bundle**: Reactive Forms + ngx-mask + custom validators
-- **Testing Bundle**: Jest + Testing Library + Spectator
-- **Performance Bundle**: Angular Universal + Prerender + Compression
-- **Authentication Bundle**: Auth0/Firebase integration setup
+### 📦 **Popular Library Bundles** (DISABLED)
+The previous design included predefined library bundles but these bundles are disabled in the
+current implementation. Libraries are added interactively or via manual entry.
 
-### 🔧 **Configuration Presets**
-- **TypeScript strict mode** configuration
-- **ESLint + Prettier** setup with Angular best practices
-- **Husky** pre-commit hooks (lint, format, test)
-- **GitHub Actions / GitLab CI** templates for Angular projects
-- **Docker** configuration for containerized development
-- **VS Code** workspace settings and recommended extensions
+### 🔧 **Configuration Presets** (DISABLED)
+Automatic configuration presets (ESLint, Prettier, Husky, CI templates, Docker, editor settings)
+are not applied by the CLI. Users can add these manually after project creation.
 
 ### 📋 **Project Structure Generator**
 Auto-generate folder structure:
@@ -173,22 +165,13 @@ src/
 - Test coverage configuration (Istanbul)
 - Mock API setup with MSW (Mock Service Worker)
 
-### 📚 **Documentation Generation**
-- Auto-generate `README.md` with:
-  - Project description
-  - Installation instructions
-  - Available scripts
-  - Project structure overview
-  - Contributing guidelines
-- Setup Compodoc for code documentation
-- Generate `CHANGELOG.md` template
+### 📚 **Documentation Generation** (DISABLED)
+Automatic README/CHANGELOG/Compodoc generation was removed; the CLI does not currently scaffold
+project documentation templates.
 
-### 🚀 **Git Integration**
-- Initialize git repository
-- Create `.gitignore` with Angular-specific entries
-- Setup branch protection recommendations
-- Optional: Create initial commit with message
-- Optional: Connect to GitHub/GitLab and create remote repository
+### 🚀 **Git Integration** (NOT AUTOMATIC)
+Helper functions for Git initialization exist in `src/utils/file-utils.js`, but the CLI does not
+automatically initialize repositories or create commits during project creation.
 
 ### 🎯 **Best Practices Enforcement**
 - Enable Angular strict mode by default
@@ -220,10 +203,8 @@ After project creation:
 - Security advisory alerts for dependencies
 
 ### 💾 **Profile Saving**
-- Allow users to save their configuration as a profile
-- Reuse saved profiles for future projects
-- Share profiles with team (export/import JSON)
-- Cloud sync for profiles (optional)
+Profiles are saved locally to `~/.ng-init/profiles.json`. The CLI supports save/load/export/import
+of profiles, but there is no cloud sync or remote profile storage in the current implementation.
 
 ### 🧰 **Dependency Management**
 - Show dependency tree visualization
