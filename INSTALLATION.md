@@ -278,6 +278,8 @@ Profiles are stored at:
 - **Windows**: `C:\Users\<username>\.ng-init\profiles.json`
 - **macOS/Linux**: `~/.ng-init/profiles.json`
 
+Note: Profiles are local only. There is no cloud sync or remote profile storage in this release.
+
 ## 🎯 First Run
 
 After installation, run:
@@ -297,6 +299,8 @@ Then create your first project:
 ```bash
 ng-init
 ```
+
+Important: The CLI does not automatically initialize Git repositories, create `.gitignore` files, or generate README/CHANGELOG files. Helper functions exist in `src/utils/file-utils.js` for manual use.
 
 ## 📚 Next Steps
 

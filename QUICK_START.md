@@ -39,6 +39,10 @@ The CLI will guide you through:
 6. **Library Search** - Add additional npm packages (with auto version resolution)
 7. **Save Profile** - Optionally save your configuration for reuse
 
+Note:
+- Project templates, library bundles, and automatic configuration presets (ESLint, Husky, CI, README/CHANGELOG generation, or automatic Git initialization) are disabled in this implementation. Configure projects via the interactive prompts.
+- Profiles are stored locally at `~/.ng-init/profiles.json` (no cloud sync).
+
 ### Step 3: Start Developing
 
 ```bash

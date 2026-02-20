@@ -139,13 +139,13 @@ Before submitting a PR:
 
 ## 🎯 Areas We Need Help With
 
-- **Templates**: More project templates
-- **Bundles**: Additional library bundles
+- **Templates / Presets**: Re-introduction of project templates, configuration presets (ESLint/Prettier/Husky)
+- **Bundles**: Curate popular library bundles for quick install
 - **Testing**: Unit tests and integration tests
-- **Documentation**: Better examples and guides
-- **Platform Support**: Better support for Linux/macOS
+- **Documentation**: Better examples and guides; optional automated README/CHANGELOG templates
+- **Platform Support**: Better support for Linux/macOS and non-winget Windows flows
 - **Performance**: Optimization and caching
-- **UI/UX**: Better interactive prompts
+- **UI/UX**: Improve interactive prompts and accessibility
 - **Version Resolution**: Enhanced library compatibility algorithms
 
 ## 🆕 Recent Updates
@@ -191,6 +191,10 @@ The following features were added recently:
    ```bash
    npm unlink -g ng-init
    ```
+
+Notes:
+- Profiles are saved locally at `~/.ng-init/profiles.json`. There is no cloud-sync for profiles.
+- The CLI intentionally does not perform automatic Git initialization or generate project documentation; maintainers can add scripts using helpers in `src/utils/file-utils.js`.
 
 ## 🐛 Debugging
 
