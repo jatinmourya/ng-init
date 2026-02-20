@@ -1,5 +1,6 @@
 import semver from 'semver';
 import chalk from 'chalk';
+import { printKeyValue } from './table-helper.js';
 import axios from 'axios';
 
 const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
@@ -34,20 +35,14 @@ export function checkNodeCompatibility(currentNodeVersion, requiredNodeVersion) 
  * Display compatibility status
  */
 export function displayCompatibilityStatus(compatibility) {
-    console.log(chalk.bold.cyan('\n📋 Compatibility Check\n'));
-    console.log(chalk.gray('━'.repeat(50)));
-    
-    console.log(chalk.white('Current Node.js:  ') + chalk.cyan(`v${compatibility.current}`));
-    console.log(chalk.white('Required Node.js: ') + chalk.cyan(compatibility.required));
-    
-    if (compatibility.compatible) {
-        console.log(chalk.white('Status:           ') + chalk.green('✓ Compatible'));
-    } else {
-        console.log(chalk.white('Status:           ') + chalk.red('✗ Incompatible'));
-    }
-    
-    console.log(chalk.gray('━'.repeat(50)) + '\n');
-    
+    const rows = [
+        ['Current Node.js', chalk.cyan(`v${compatibility.current}`)],
+        ['Required Node.js', chalk.cyan(compatibility.required)],
+        ['Status', compatibility.compatible ? chalk.green('✓ Compatible') : chalk.red('✗ Incompatible')]
+    ];
+
+    printKeyValue('📋 Compatibility Check', rows);
+
     return compatibility.compatible;
 }
 

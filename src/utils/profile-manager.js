@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { homedir } from 'os';
 import chalk from 'chalk';
+import { printKeyValue, printObjectList } from './table-helper.js';
 
 const PROFILES_DIR = path.join(homedir(), '.ng-init');
 const PROFILES_FILE = path.join(PROFILES_DIR, 'profiles.json');
@@ -182,38 +183,25 @@ export async function importProfile(filePath) {
  * Display profile information
  */
 export function displayProfileInfo(name, profile) {
-    console.log(chalk.bold.cyan(`\n📋 Profile: ${name}\n`));
-    console.log(chalk.gray('━'.repeat(50)));
-    
-    if (profile.angularVersion) {
-        console.log(chalk.white('Angular Version: ') + chalk.green(profile.angularVersion));
-    }
-    
-    // Note: template field is deprecated but may exist in old profiles
-    if (profile.template) {
-        console.log(chalk.yellow('Template:        ') + chalk.gray(`${profile.template} (deprecated, will use options instead)`));
-    }
-    
+    const rows = [];
+    if (profile.angularVersion) rows.push(['Angular Version', chalk.green(profile.angularVersion)]);
+    if (profile.template) rows.push(['Template', chalk.gray(`${profile.template} (deprecated)`)]);
+    rows.push(['Libraries', chalk.cyan(profile.libraries?.length || 0)]);
+    if (profile.createdAt) rows.push(['Created', chalk.gray(new Date(profile.createdAt).toLocaleString())]);
+    if (profile.updatedAt) rows.push(['Updated', chalk.gray(new Date(profile.updatedAt).toLocaleString())]);
+
+    printKeyValue(`📋 Profile: ${name}`, rows);
+
     if (profile.libraries && profile.libraries.length > 0) {
-        console.log(chalk.white('Libraries:       ') + chalk.cyan(profile.libraries.length));
-        profile.libraries.slice(0, 5).forEach(lib => {
-            console.log(chalk.gray(`  • ${lib.name}@${lib.version}`));
-        });
-        if (profile.libraries.length > 5) {
-            console.log(chalk.gray(`  ... and ${profile.libraries.length - 5} more`));
+        const libs = profile.libraries.slice(0, 50).map(lib => ({ Library: lib.name, Version: lib.version, Description: lib.description || '' }));
+        printObjectList('Libraries (showing up to 50)', libs, ['Library', 'Version', 'Description']);
+        if (profile.libraries.length > 50) {
+            console.log(chalk.gray(`  ... and ${profile.libraries.length - 50} more`));
         }
     }
-    
+
     if (profile.options) {
-        console.log(chalk.white('Options:'));
-        Object.entries(profile.options).forEach(([key, value]) => {
-            console.log(chalk.gray(`  • ${key}: ${value}`));
-        });
+        const opts = Object.entries(profile.options).map(([k, v]) => ({ Option: k, Value: String(v) }));
+        printObjectList('Options', opts, ['Option', 'Value']);
     }
-    
-    if (profile.createdAt) {
-        console.log(chalk.white('Created:         ') + chalk.gray(new Date(profile.createdAt).toLocaleString()));
-    }
-    
-    console.log(chalk.gray('━'.repeat(50)) + '\n');
 }

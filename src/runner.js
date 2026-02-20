@@ -322,17 +322,19 @@ export async function runCli() {
         }
 
         // Step 12: Confirm and create project
-        console.log(chalk.bold.cyan('\n📋 Project Configuration Summary\n'));
-        console.log(chalk.gray('━'.repeat(50)));
-        console.log(chalk.white('Project Name:     ') + chalk.green(config.projectName));
-        console.log(chalk.white('Location:         ') + chalk.cyan(projectPath));
-        console.log(chalk.white('Angular Version:  ') + chalk.green(config.angularVersion));
-        console.log(chalk.white('Style:            ') + chalk.cyan(config.options.style));
-        console.log(chalk.white('Routing:          ') + chalk.cyan(config.options.routing ? 'Yes' : 'No'));
-        console.log(chalk.white('Strict Mode:      ') + chalk.cyan(config.options.strict ? 'Yes' : 'No'));
-        console.log(chalk.white('Standalone:       ') + chalk.cyan(config.options.standalone ? 'Yes' : 'No'));
-        console.log(chalk.white('Libraries:        ') + chalk.cyan(config.libraries.length));
-        console.log(chalk.gray('━'.repeat(50)) + '\n');
+        const { printKeyValue } = await import('./utils/table-helper.js');
+        const summary = [
+            ['Project Name', chalk.green(config.projectName)],
+            ['Location', chalk.cyan(projectPath)],
+            ['Angular Version', chalk.green(config.angularVersion)],
+            ['Style', chalk.cyan(config.options.style)],
+            ['Routing', chalk.cyan(config.options.routing ? 'Yes' : 'No')],
+            ['Strict Mode', chalk.cyan(config.options.strict ? 'Yes' : 'No')],
+            ['Standalone', chalk.cyan(config.options.standalone ? 'Yes' : 'No')],
+            ['Libraries', chalk.cyan(config.libraries.length)]
+        ];
+
+        printKeyValue('📋 Project Configuration Summary', summary);
 
         const shouldCreate = await confirm({
             message: 'Create project with this configuration?',
@@ -369,27 +371,19 @@ export async function runCli() {
             // Show adjusted versions if any
             const adjusted = resolvedLibraries.filter(lib => lib.adjusted);
             if (adjusted.length > 0) {
+                const { printObjectList } = await import('./utils/table-helper.js');
+                const rows = adjusted.map(lib => ({ Package: lib.name, From: lib.originalVersion, To: lib.version, Reason: lib.reason || '' }));
                 console.log(chalk.green('✓ Dynamically resolved compatible library versions:\n'));
-                adjusted.forEach(lib => {
-                    console.log(chalk.gray(`   ${lib.name}: ${lib.originalVersion} → ${lib.version}`));
-                    if (lib.reason) {
-                        console.log(chalk.gray(`     └─ ${lib.reason}`));
-                    }
-                });
-                console.log('');
+                printObjectList('Resolved Library Versions', rows, ['Package', 'From', 'To', 'Reason']);
             }
 
             // Show warnings for potentially incompatible libraries
             const warnings = resolvedLibraries.filter(lib => lib.warning);
             if (warnings.length > 0) {
+                const { printObjectList } = await import('./utils/table-helper.js');
+                const rows = warnings.map(lib => ({ Package: lib.name, Version: lib.version, Reason: lib.reason || '' }));
                 console.log(chalk.yellow('⚠️  Potential compatibility warnings:\n'));
-                warnings.forEach(lib => {
-                    console.log(chalk.yellow(`   ${lib.name}@${lib.version}`));
-                    if (lib.reason) {
-                        console.log(chalk.gray(`     └─ ${lib.reason}`));
-                    }
-                });
-                console.log('');
+                printObjectList('Compatibility Warnings', rows, ['Package', 'Version', 'Reason']);
             }
 
             // Separate production and dev packages

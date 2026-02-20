@@ -1,6 +1,7 @@
 import { execa } from 'execa';
 import chalk from 'chalk';
 import semver from 'semver';
+import { printObjectList } from './table-helper.js';
 
 /**
  * Get the current Node.js version
@@ -62,20 +63,35 @@ export async function getAngularCliVersion() {
  * Display all system versions
  */
 export async function displaySystemVersions() {
-    console.log(chalk.bold.cyan('\n🔍 System Environment Check\n'));
-    console.log(chalk.gray('━'.repeat(50)));
+    // console.log(chalk.bold.cyan('\n🔍 System Environment Check\n'));
 
     const nodeVersion = await getNodeVersion();
     const npmVersion = await getNpmVersion();
     const nvmVersion = await getNvmVersion();
-    const ngVersion = await getAngularCliVersion();
+    const ngRaw = await getAngularCliVersion();
 
-    console.log(chalk.white('Node.js:      ') + (nodeVersion ? chalk.green(`v${nodeVersion}`) : chalk.red('Not installed')));
-    console.log(chalk.white('npm:          ') + (npmVersion ? chalk.green(`v${npmVersion}`) : chalk.red('Not installed')));
-    console.log(chalk.white('nvm:          ') + (nvmVersion ? chalk.green(`v${nvmVersion}`) : chalk.yellow('Not installed')));
-    console.log(chalk.white('Angular CLI:  ') + (ngVersion ? chalk.green(`v${ngVersion}`) : chalk.yellow('Not installed')));
-    
-    console.log(chalk.gray('━'.repeat(50)) + '\n');
+    // Try to extract a semantic version for Angular CLI from the raw output
+    let ngVersion = null;
+    if (ngRaw) {
+        const m = ngRaw.match(/(\d+\.\d+\.\d+)/);
+        ngVersion = m ? m[1] : (ngRaw.split('\n')[0] || null);
+    }
+
+    const tableData = [
+        { Tool: "Node.js", Version: nodeVersion ? `${nodeVersion}` : "Not installed" },
+        { Tool: "npm", Version: npmVersion ? `${npmVersion}` : "Not installed" },
+        { Tool: "nvm", Version: nvmVersion ? `${nvmVersion}` : "Not installed" },
+        { Tool: "Angular CLI", Version: ngVersion ? `${ngVersion}` : "Not installed" }
+    ];
+
+    // Use table-helper to render the versions table (consistent cli-table3 usage centralized)
+    try {
+        const rows = tableData.map(r => ({ Tool: r.Tool, Version: r.Version }));
+        printObjectList('🔍 System Environment Check', rows, ['Tool', 'Version']);
+    } catch (err) {
+        // fallback to console.table if anything unexpected happens
+        console.table(tableData);
+    }
 
     return {
         node: nodeVersion,

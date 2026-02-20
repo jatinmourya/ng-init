@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { runCli } from './runner.js';
-import { listProfiles, loadProfile, deleteProfile, displayProfileInfo, exportProfile, importProfile } from './utils/profile-manager.js';
+import { listProfiles, loadProfile, deleteProfile, displayProfileInfo, exportProfile, importProfile, getProfileDetails } from './utils/profile-manager.js';
+import { printObjectList } from './utils/table-helper.js';
 import chalk from 'chalk';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -43,12 +44,12 @@ profileCommand
                 return;
             }
 
-            console.log(chalk.bold.cyan('\n📋 Saved Profiles:\n'));
-            console.log(chalk.gray('━'.repeat(50)));
-            profiles.forEach(name => {
-                console.log(chalk.white('  • ') + chalk.green(name));
-            });
-            console.log(chalk.gray('━'.repeat(50)) + '\n');
+            const rows = [];
+            for (const name of profiles) {
+                const details = await getProfileDetails(name);
+                rows.push({ Name: details.name, Angular: details.angularVersion || '-', Libraries: details.libraries || 0, Created: details.createdAt || '-' });
+            }
+            printObjectList('Saved Profiles', rows, ['Name', 'Angular', 'Libraries', 'Created']);
         } catch (error) {
             console.error(chalk.red('Error listing profiles:'), error.message);
         }

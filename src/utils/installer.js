@@ -1,6 +1,7 @@
 import { execa } from 'execa';
 import ora from 'ora';
 import chalk from 'chalk';
+import { printKeyValue, printObjectList } from './table-helper.js';
 import { platform } from 'os';
 
 /**
@@ -89,59 +90,31 @@ export function getNvmInstallInstructions() {
 export function displayNvmInstallGuide() {
     const data = getNvmInstallInstructions();
 
-    console.log(chalk.bold.yellow('\n📚 NVM Installation Guide\n'));
-    console.log(chalk.gray('━'.repeat(50)));
+    printKeyValue('📚 NVM Installation Guide', [
+        ['OS', chalk.cyan(data.os)],
+        ['Download/Repo', data.download ? chalk.blue(data.download) : (data.repo ? chalk.blue(data.repo) : '-')],
+        ['Install', data.install ? chalk.green(data.install) : '-'],
+        ['Alternative', data.alternative ? chalk.green(data.alternative) : '-']
+    ]);
 
-    // OS
-    console.log(chalk.white('OS: ') + chalk.cyan(data.os));
-
-    // Download / Repo
-    if (data.download) {
-        console.log(chalk.white('Download: ') + chalk.blue(data.download));
-    }
-
-    if (data.repo) {
-        console.log(chalk.white('Repository: ') + chalk.blue(data.repo));
-    }
-
-    // Install command
-    if (data.install) {
-        console.log(chalk.white('\nInstall Command:'));
-        console.log(chalk.green(`  ${data.install}`));
-    }
-
-    // Alternative
-    if (data.alternative) {
-        console.log(chalk.white('\nAlternative Command:'));
-        console.log(chalk.green(`  ${data.alternative}`));
-    }
-
-    // Steps
     if (Array.isArray(data.steps)) {
-        console.log(chalk.white('\nSteps:'));
-
-        data.steps.forEach((step, i) => {
-            console.log(chalk.gray(`  ${i + 1}. ${step}`));
-        });
+        const steps = data.steps.map((s, i) => ({ Step: `${i + 1}`, Instruction: s }));
+        printObjectList('Steps', steps, ['Step', 'Instruction']);
     }
 
-    // Post-install (macOS mainly)
     if (Array.isArray(data.postInstall)) {
-        console.log(chalk.white('\nPost-Install:'));
-
-        data.postInstall.forEach((step, i) => {
-            console.log(chalk.gray(`  ${i + 1}. ${step}`));
-        });
+        const post = data.postInstall.map((s, i) => ({ Step: `${i + 1}`, Instruction: s }));
+        printObjectList('Post-Install', post, ['Step', 'Instruction']);
     }
-
-    console.log(chalk.gray('━'.repeat(50)));
 
     // Benefits
-    console.log(chalk.yellow('\n💡 Why use NVM?'));
-    console.log(chalk.gray('  • Manage multiple Node.js versions'));
-    console.log(chalk.gray('  • Switch instantly'));
-    console.log(chalk.gray('  • No sudo/admin required'));
-    console.log(chalk.gray('  • Per-project Node versions\n'));
+    const benefits = [
+        { Benefit: 'Manage multiple Node.js versions' },
+        { Benefit: 'Switch instantly' },
+        { Benefit: 'No sudo/admin required' },
+        { Benefit: 'Per-project Node versions' }
+    ];
+    printObjectList('Why use NVM?', benefits, ['Benefit']);
 }
 
 /**

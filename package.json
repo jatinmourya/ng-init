@@ -50,7 +50,8 @@
     "execa": "^9.6.1",
     "lodash.debounce": "^4.0.8",
     "ora": "^8.0.1",
-    "semver": "^7.5.4"
+    "semver": "^7.5.4",
+    "cli-table3": "^0.6.2"
   },
   "devDependencies": {
     "esbuild": "^0.27.2",

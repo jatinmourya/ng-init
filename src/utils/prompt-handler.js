@@ -2,6 +2,7 @@ import { search, select, input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import { searchNpmPackages, getEnhancedPackageInfo, formatDownloads, getPackageVersions, getMajorVersions, getMinorVersionsForMajor, getPatchVersionsForMinor, getPackagePeerDependencies, findCompatiblePackageVersions } from './npm-search.js';
 import { checkLibraryCompatibility, isVersionCompatibleWithAngular, getAllCompatibleVersions } from './compatibility.js';
+import { printObjectList, printKeyValue } from './table-helper.js';
 
 /**
  * Library tracker to prevent duplicate selections
@@ -40,19 +41,8 @@ class LibraryTracker {
             console.log(chalk.gray('  No libraries selected yet.\n'));
             return;
         }
-
-        console.log(chalk.bold.cyan('📦 Currently Selected Libraries:\n'));
-        console.log(chalk.gray('━'.repeat(60)));
-        
-        this.selectedLibraries.forEach((lib, name) => {
-            console.log(chalk.green(`  ✓ ${name}@${lib.version}`));
-            if (lib.description) {
-                const truncatedDesc = lib.description.substring(0, 70);
-                console.log(chalk.gray(`    ${truncatedDesc}${lib.description.length > 70 ? '...' : ''}`));
-            }
-        });
-        
-        console.log(chalk.gray('━'.repeat(60)) + '\n');
+        const libs = this.getAll().map(lib => ({ Library: lib.name, Version: lib.version, Description: lib.description ? lib.description.substring(0, 70) : '' }));
+        printObjectList('📦 Currently Selected Libraries', libs, ['Library', 'Version', 'Description']);
     }
 }
 
@@ -118,10 +108,12 @@ export async function interactiveLibrarySearch(angularVersion = null) {
             const info = await getEnhancedPackageInfo(packageName);
             
             if (info) {
-                console.log(chalk.green(`\n✓ Selected: ${info.name}`));
-                console.log(chalk.gray(`  Description: ${info.description}`));
-                console.log(chalk.gray(`  Latest version: ${info.latestVersion}`));
-                console.log(chalk.gray(`  Weekly downloads: ${formatDownloads(info.weeklyDownloads)}`));
+                printKeyValue('\nSelected Package', [
+                    ['Name', chalk.green(info.name)],
+                    ['Description', chalk.gray(info.description)],
+                    ['Latest version', chalk.cyan(info.latestVersion)],
+                    ['Weekly downloads', chalk.gray(formatDownloads(info.weeklyDownloads))]
+                ]);
 
                 // Ask for version selection method
                 const versionMethod = await select({
