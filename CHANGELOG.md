@@ -98,7 +98,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - chalk: ^5.3.0
 - commander: ^13.1.0
 - execa: ^9.6.1
-- lodash.debounce: ^4.0.8
 - ora: ^8.0.1
 - semver: ^7.5.4
 

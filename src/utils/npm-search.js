@@ -1,388 +1,505 @@
 import axios from 'axios';
 import chalk from 'chalk';
-import debounce from 'lodash.debounce';
+import { Agent as HttpAgent } from 'node:http';
+import { Agent as HttpsAgent } from 'node:https';
 
-const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
-const NPM_SEARCH_URL = 'https://registry.npmjs.org/-/v1/search';
-const NPM_DOWNLOADS_URL = 'https://api.npmjs.org/downloads/point/last-week';
+// ═══════════════════════════════════════════════════════════════════════
+//  Constants
+// ═══════════════════════════════════════════════════════════════════════
+
+const NPM_REGISTRY = 'https://registry.npmjs.org';
+const NPM_SEARCH = `${NPM_REGISTRY}/-/v1/search`;
+const NPM_DOWNLOADS = 'https://api.npmjs.org/downloads/point/last-week';
+
+const TIMEOUT = 5_000;
+const TIMEOUT_EXTENDED = 10_000;
+const CACHE_TTL = 5 * 60_000;            // 5 minutes
+const PRERELEASE_RE = /-(rc|beta|next|alpha|canary|dev|pre)/i;
+
+// ═══════════════════════════════════════════════════════════════════════
+//  HTTP Clients — connection pooling + keep-alive + compression
+// ═══════════════════════════════════════════════════════════════════════
+
+const agentOpts = { keepAlive: true, maxSockets: 15, maxFreeSockets: 5 };
+const httpAgent = new HttpAgent(agentOpts);
+const httpsAgent = new HttpsAgent(agentOpts);
+
+/** Full-metadata client (for description, homepage, license, etc.) */
+const api = axios.create({
+  timeout: TIMEOUT,
+  httpAgent,
+  httpsAgent,
+  headers: { 'Accept-Encoding': 'gzip, deflate, br' },
+});
 
 /**
- * Search npm packages
+ * Abbreviated-metadata client.
+ * Returns only install-relevant fields: versions (with deps, engines, dist), dist-tags.
+ * Payloads are 10–100× smaller than full metadata.
+ * @see https://github.com/npm/registry/blob/master/docs/responses/package-metadata.md
  */
-export async function searchNpmPackages(query, size = 10) {
-    try {
-        const response = await axios.get(NPM_SEARCH_URL, {
-            params: {
-                text: query,
-                size: size
-            },
-            timeout: 5000
+const apiLite = axios.create({
+  timeout: TIMEOUT_EXTENDED,
+  httpAgent,
+  httpsAgent,
+  headers: {
+    Accept: 'application/vnd.npm.install-v1+json',
+    'Accept-Encoding': 'gzip, deflate, br',
+  },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TTL Cache with In-Flight Request Deduplication
+// ═══════════════════════════════════════════════════════════════════════
+
+class TTLCache {
+  #store = new Map();
+  #inflight = new Map();
+  #ttl;
+
+  constructor(ttl = CACHE_TTL) {
+    this.#ttl = ttl;
+  }
+
+  get(key) {
+    const entry = this.#store.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.exp) {
+      this.#store.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  set(key, value) {
+    this.#store.set(key, { value, exp: Date.now() + this.#ttl });
+    return this;
+  }
+
+  /**
+   * Deduplicate concurrent requests for the same key.
+   * If a fetch is already in-flight, returns the existing Promise
+   * instead of firing a duplicate HTTP request.
+   */
+  async dedupe(key, fetcher) {
+    const cached = this.get(key);
+    if (cached !== undefined) return cached;
+
+    if (!this.#inflight.has(key)) {
+      const promise = fetcher()
+        .then(value => {
+          this.set(key, value);
+          this.#inflight.delete(key);
+          return value;
+        })
+        .catch(err => {
+          this.#inflight.delete(key);
+          throw err;
         });
 
-        return response.data.objects.map(obj => ({
-            name: obj.package.name,
-            version: obj.package.version,
-            description: obj.package.description || 'No description',
-            author: obj.package.publisher?.username || 'Unknown',
-            date: obj.package.date,
-            verified: obj.package.publisher?.verified || false
-        }));
+      this.#inflight.set(key, promise);
+    }
+
+    return this.#inflight.get(key);
+  }
+
+  clear() {
+    this.#store.clear();
+    this.#inflight.clear();
+  }
+}
+
+const cache = new TTLCache();
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Version Utilities (zero external dependencies)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Numerically compare two semver strings.
+ * Returns negative if a < b, 0 if equal, positive if a > b.
+ */
+function semverCompare(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0, len = Math.max(pa.length, pb.length); i < len; i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/** Sort version strings descending (newest first). Returns a new array. */
+function sortDesc(versions) {
+  return [...versions].sort((a, b) => semverCompare(b, a));
+}
+
+/** Filter out pre-release versions and sort descending. */
+function stableSortedDesc(versions) {
+  return sortDesc(versions.filter(v => !PRERELEASE_RE.test(v)));
+}
+
+/** Map a package search result object to our normalized shape. */
+function mapSearchResult({ package: pkg }) {
+  return {
+    name: pkg.name,
+    version: pkg.version,
+    description: pkg.description || 'No description',
+    author: pkg.publisher?.username || 'Unknown',
+    date: pkg.date,
+    verified: pkg.publisher?.verified ?? false,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Internal Data Fetching (cached + deduplicated)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Fetch abbreviated metadata — versions, dist-tags, deps, engines only.
+ * Dramatically smaller than full metadata. Cached and deduplicated.
+ */
+export function fetchAbbreviated(packageName) {
+  return cache.dedupe(`abbr:${packageName}`, async () => {
+    const { data } = await apiLite.get(`${NPM_REGISTRY}/${packageName}`);
+    return data;
+  });
+}
+
+/**
+ * Fetch full metadata — includes description, homepage, license, etc.
+ * Larger payload; use only when those fields are needed.
+ */
+function fetchFull(packageName) {
+  return cache.dedupe(`full:${packageName}`, async () => {
+    const { data } = await api.get(`${NPM_REGISTRY}/${packageName}`);
+    return data;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Public API — Search & Package Info
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Search npm packages by query string.
+ * Accepts an optional AbortSignal to cancel in-flight requests (e.g. from inquirer's search).
+ */
+export async function searchNpmPackages(query, size = 10, { signal } = {}) {
+    if (!query?.trim()) return [];
+
+    try {
+        const { data } = await api.get(NPM_SEARCH, {
+            params: { text: query, size },
+            signal,
+        });
+        return data.objects.map(mapSearchResult);
     } catch (error) {
+        if (error.name === 'CanceledError' || signal?.aborted) return [];
         console.error('Error searching npm packages:', error.message);
         return [];
     }
 }
 
 /**
- * Get package details from npm registry
+ * Get detailed package info (requires full metadata).
  */
 export async function getPackageDetails(packageName) {
-    try {
-        const response = await axios.get(`${NPM_REGISTRY_URL}/${packageName}`, {
-            timeout: 5000
-        });
+  try {
+    const data = await fetchFull(packageName);
 
-        const latestVersion = response.data['dist-tags']?.latest;
-        const versions = Object.keys(response.data.versions || {});
-
-        return {
-            name: response.data.name,
-            description: response.data.description || 'No description',
-            latestVersion: latestVersion,
-            versions: versions,
-            homepage: response.data.homepage,
-            repository: response.data.repository,
-            license: response.data.license,
-            keywords: response.data.keywords || []
-        };
-    } catch (error) {
-        if (error.response?.status === 404) {
-            return null;
-        }
-        throw error;
-    }
+    return {
+      name: data.name,
+      description: data.description || 'No description',
+      latestVersion: data['dist-tags']?.latest,
+      versions: Object.keys(data.versions || {}),
+      homepage: data.homepage,
+      repository: data.repository,
+      license: data.license,
+      keywords: data.keywords || [],
+    };
+  } catch (error) {
+    if (error.response?.status === 404) return null;
+    throw error;
+  }
 }
 
 /**
- * Get package download statistics
+ * Get weekly download count for a package.
  */
 export async function getPackageDownloads(packageName) {
-    try {
-        const response = await axios.get(`${NPM_DOWNLOADS_URL}/${packageName}`, {
-            timeout: 5000
-        });
-
-        return response.data.downloads;
-    } catch (error) {
-        return 0;
-    }
+  try {
+    const { data } = await api.get(`${NPM_DOWNLOADS}/${packageName}`);
+    return data.downloads;
+  } catch {
+    return 0;
+  }
 }
 
 /**
- * Validate if a package exists on npm
+ * Check whether a package exists (uses lightweight abbreviated metadata).
  */
 export async function validatePackage(packageName) {
-    const details = await getPackageDetails(packageName);
-    return details !== null;
+  try {
+    await fetchAbbreviated(packageName);
+    return true;
+  } catch (error) {
+    if (error.response?.status === 404) return false;
+    throw error;
+  }
 }
 
 /**
- * Get enhanced package info (details + downloads)
+ * Get enriched package info: details + weekly downloads (parallel fetch).
  */
 export async function getEnhancedPackageInfo(packageName) {
-    try {
-        const [details, downloads] = await Promise.all([
-            getPackageDetails(packageName),
-            getPackageDownloads(packageName)
-        ]);
+  try {
+    const [details, downloads] = await Promise.all([
+      getPackageDetails(packageName),
+      getPackageDownloads(packageName),
+    ]);
 
-        if (!details) {
-            return null;
-        }
-
-        return {
-            ...details,
-            weeklyDownloads: downloads
-        };
-    } catch (error) {
-        console.error(`Error getting package info for ${packageName}:`, error.message);
-        return null;
-    }
+    return details ? { ...details, weeklyDownloads: downloads } : null;
+  } catch (error) {
+    console.error(`Error getting package info for ${packageName}:`, error.message);
+    return null;
+  }
 }
 
 /**
- * Format download count for display
+ * Format a download count for human-readable display.
  */
-export function formatDownloads(downloads) {
-    if (downloads >= 1000000) {
-        return `${(downloads / 1000000).toFixed(1)}M`;
-    } else if (downloads >= 1000) {
-        return `${(downloads / 1000).toFixed(1)}K`;
-    }
-    return downloads.toString();
+export function formatDownloads(count) {
+  if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return String(count);
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  Debounced Search (with stale-request cancellation)
+// ═══════════════════════════════════════════════════════════════════════
+
 /**
- * Debounced search function for autocomplete
+ * Create a debounced search function that automatically cancels
+ * in-flight HTTP requests when a newer keystroke arrives.
  */
-export const debouncedSearch = debounce(async (query, callback) => {
+export function createDebouncedSearch(delay = 300) {
+  let timer = null;
+  let controller = null;
+
+  return function debouncedSearch(query, callback) {
+    if (timer) clearTimeout(timer);
+    if (controller) controller.abort();
+
     if (!query || query.length < 2) {
-        callback([]);
-        return;
+      callback([]);
+      return;
     }
 
-    const results = await searchNpmPackages(query, 10);
-    callback(results);
-}, 300);
+    const ac = (controller = new AbortController());
 
-/**
- * Get all versions of Angular CLI
- */
-export async function getAngularVersions() {
-    try {
-        const response = await axios.get(`${NPM_REGISTRY_URL}/@angular/cli`, {
-            timeout: 10000
+    timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get(NPM_SEARCH, {
+          params: { text: query, size: 10 },
+          signal: ac.signal,
         });
-
-        const versions = Object.keys(response.data.versions || {})
-            .filter(v => !v.includes('rc') && !v.includes('beta') && !v.includes('next'))
-            .sort((a, b) => {
-                // Sort in descending order (newest first)
-                const aParts = a.split('.').map(Number);
-                const bParts = b.split('.').map(Number);
-                
-                for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-                    const aVal = aParts[i] || 0;
-                    const bVal = bParts[i] || 0;
-                    if (aVal !== bVal) return bVal - aVal;
-                }
-                return 0;
-            });
-
-        const distTags = response.data['dist-tags'] || {};
-        
-        return {
-            versions: versions,
-            latest: distTags.latest,
-            lts: distTags.lts
-        };
-    } catch (error) {
-        console.error('Error fetching Angular versions:', error.message);
-        return { versions: [], latest: null, lts: null };
-    }
-}
-
-/**
- * Get unique major versions from all Angular versions
- */
-export function getMajorVersions(versions) {
-    const majorVersions = new Set();
-    
-    versions.forEach(version => {
-        const major = version.split('.')[0];
-        majorVersions.add(major);
-    });
-    
-    return Array.from(majorVersions).sort((a, b) => Number(b) - Number(a));
-}
-
-/**
- * Get minor versions for a specific major version
- */
-export function getMinorVersionsForMajor(versions, major) {
-    const minorVersions = new Set();
-    
-    versions
-        .filter(v => v.startsWith(`${major}.`))
-        .forEach(version => {
-            const parts = version.split('.');
-            const minorVersion = `${parts[0]}.${parts[1]}`;
-            minorVersions.add(minorVersion);
-        });
-    
-    return Array.from(minorVersions).sort((a, b) => {
-        const aParts = a.split('.').map(Number);
-        const bParts = b.split('.').map(Number);
-        for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-            const aVal = aParts[i] || 0;
-            const bVal = bParts[i] || 0;
-            if (aVal !== bVal) return bVal - aVal;
+        if (!ac.signal.aborted) {
+          callback(data.objects.map(mapSearchResult));
         }
-        return 0;
-    });
+      } catch (error) {
+        if (!ac.signal.aborted) callback([]);
+      }
+    }, delay);
+  };
 }
 
-/**
- * Get patch versions for a specific major.minor version
- */
-export function getPatchVersionsForMinor(versions, majorMinor) {
-    return versions
-        .filter(v => v.startsWith(`${majorMinor}.`))
-        .sort((a, b) => {
-            const aParts = a.split('.').map(Number);
-            const bParts = b.split('.').map(Number);
-            for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-                const aVal = aParts[i] || 0;
-                const bVal = bParts[i] || 0;
-                if (aVal !== bVal) return bVal - aVal;
-            }
-            return 0;
-        });
-}
+/** Default debounced search instance (backward-compatible export). */
+export const debouncedSearch = createDebouncedSearch();
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Version Listing (abbreviated metadata — fast)
+// ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Get all versions of a specific npm package
+ * Get all stable versions of a package, sorted newest-first.
+ * Uses abbreviated metadata for minimal payload size.
  */
 export async function getPackageVersions(packageName) {
-    try {
-        const response = await axios.get(`${NPM_REGISTRY_URL}/${packageName}`, {
-            timeout: 10000
-        });
+  try {
+    const data = await fetchAbbreviated(packageName);
+    const versions = stableSortedDesc(Object.keys(data.versions || {}));
+    const distTags = data['dist-tags'] || {};
 
-        const versions = Object.keys(response.data.versions || {})
-            .filter(v => !v.includes('rc') && !v.includes('beta') && !v.includes('next') && !v.includes('alpha'))
-            .sort((a, b) => {
-                // Sort in descending order (newest first)
-                const aParts = a.split('.').map(Number);
-                const bParts = b.split('.').map(Number);
-                
-                for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-                    const aVal = aParts[i] || 0;
-                    const bVal = bParts[i] || 0;
-                    if (aVal !== bVal) return bVal - aVal;
-                }
-                return 0;
-            });
-
-        const distTags = response.data['dist-tags'] || {};
-        
-        return {
-            versions: versions,
-            latest: distTags.latest,
-            lts: distTags.lts
-        };
-    } catch (error) {
-        console.error(`Error fetching versions for ${packageName}:`, error.message);
-        return { versions: [], latest: null, lts: null };
-    }
+    return {
+      versions,
+      latest: distTags.latest ?? null,
+      lts: distTags.lts ?? null,
+    };
+  } catch (error) {
+    console.error(`Error fetching versions for ${packageName}:`, error.message);
+    return { versions: [], latest: null, lts: null };
+  }
 }
 
 /**
- * Get Node.js version requirements for Angular version (fully dynamic)
+ * Get all stable @angular/cli versions.
+ * Convenience wrapper — identical cache as getPackageVersions('@angular/cli').
+ */
+export function getAngularVersions() {
+  return getPackageVersions('@angular/cli');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Version Grouping Helpers
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Extract unique major version numbers, sorted descending. */
+export function getMajorVersions(versions) {
+  const majors = [...new Set(versions.map(v => v.split('.')[0]))];
+  return majors.sort((a, b) => Number(b) - Number(a));
+}
+
+/** Get minor version groups for a given major (e.g. "16.2", "16.1"), sorted descending. */
+export function getMinorVersionsForMajor(versions, major) {
+  const prefix = `${major}.`;
+  const minors = [
+    ...new Set(
+      versions
+        .filter(v => v.startsWith(prefix))
+        .map(v => v.split('.').slice(0, 2).join('.'))
+    ),
+  ];
+  return sortDesc(minors);
+}
+
+/** Get patch versions for a specific major.minor prefix, sorted descending. */
+export function getPatchVersionsForMinor(versions, majorMinor) {
+  return sortDesc(versions.filter(v => v.startsWith(`${majorMinor}.`)));
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Angular-Specific Helpers
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Get Node.js engine requirements for a specific @angular/cli version.
+ * Reads from the (cached) abbreviated metadata — no extra HTTP request
+ * if any Angular version data was already fetched.
  */
 export async function getNodeRequirementsForAngular(angularVersion) {
-    try {
-        const response = await axios.get(`${NPM_REGISTRY_URL}/@angular/cli/${angularVersion}`, {
-            timeout: 5000
-        });
+  const major = parseInt(angularVersion.split('.')[0], 10);
 
-        const engines = response.data.engines || {};
-        
-        if (!engines.node) {
-            // If no engine requirement in package, derive from Angular major version
-            const majorVersion = parseInt(angularVersion.split('.')[0]);
-            return generateNodeRequirementFromAngularVersion(majorVersion);
-        }
-        
-        return engines.node;
-    } catch (error) {
-        // Fallback: derive requirement from Angular major version
-        const majorVersion = parseInt(angularVersion.split('.')[0]);
-        console.log(chalk.gray(`Unable to fetch Node requirements, deriving from Angular ${majorVersion}...`));
-        return generateNodeRequirementFromAngularVersion(majorVersion);
-    }
+  try {
+    const data = await fetchAbbreviated('@angular/cli');
+    const nodeEngine = data.versions?.[angularVersion]?.engines?.node;
+
+    if (nodeEngine) return nodeEngine;
+
+    return deriveNodeRequirement(major);
+  } catch {
+    console.log(chalk.gray(
+      `Unable to fetch Node requirements, deriving from Angular ${major}…`
+    ));
+    return deriveNodeRequirement(major);
+  }
 }
 
 /**
- * Generate a Node requirement range based on Angular major version (no hardcoded versions)
- * Uses a formula to suggest appropriate Node versions based on Angular version
+ * Heuristic Node.js requirement based on Angular major version.
+ * Generates three even (LTS-eligible) Node version ranges.
  */
-function generateNodeRequirementFromAngularVersion(angularMajor) {
-    // Angular typically supports Node versions that are active LTS at time of release
-    // As a general rule:
-    // - Each Angular major typically supports 2-3 Node LTS lines
-    // - Even Node versions are LTS (12, 14, 16, 18, 20, 22...)
-    // Strategy: Generate ranges based on the Angular major version dynamically
-    
-    // Calculate base Node version (ensure it's even for LTS)
-    // Use formula to derive Node version from Angular version
-    let baseNode;
-    if (angularMajor >= 15) {
-        // Modern Angular: Node version close to Angular major
-        baseNode = Math.floor(angularMajor / 2) * 2;
-    } else if (angularMajor >= 10) {
-        // Mid-range Angular: Node slightly higher
-        baseNode = Math.floor((angularMajor + 2) / 2) * 2;
-    } else {
-        // Older Angular: Node proportionally higher
-        baseNode = Math.floor((angularMajor * 1.5) / 2) * 2;
-    }
-    
-    // Generate 3 node versions (all even numbers for LTS)
-    const minNode = baseNode;
-    const midNode = baseNode + 2;
-    const maxNode = baseNode + 4;
-    
-    return `^${minNode}.0.0 || ^${midNode}.0.0 || ^${maxNode}.0.0`;
+function deriveNodeRequirement(angularMajor) {
+  let base;
+  if (angularMajor >= 15) base = Math.floor(angularMajor / 2) * 2;
+  else if (angularMajor >= 10) base = Math.floor((angularMajor + 2) / 2) * 2;
+  else base = Math.floor((angularMajor * 1.5) / 2) * 2;
+
+  return `^${base}.0.0 || ^${base + 2}.0.0 || ^${base + 4}.0.0`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  Compatibility Helpers
+// ═══════════════════════════════════════════════════════════════════════
+
 /**
- * Get peer dependencies for a specific package version
+ * Get peer dependencies for a specific version of a package.
+ * Reads from cached abbreviated metadata — no additional HTTP request
+ * if the package was already fetched.
  */
 export async function getPackagePeerDependencies(packageName, version) {
-    try {
-        const response = await axios.get(`${NPM_REGISTRY_URL}/${packageName}/${version}`, {
-            timeout: 5000
-        });
-
-        return response.data.peerDependencies || {};
-    } catch (error) {
-        console.error(`Error fetching peer dependencies for ${packageName}@${version}:`, error.message);
-        return {};
-    }
+  try {
+    const data = await fetchAbbreviated(packageName);
+    return data.versions?.[version]?.peerDependencies || {};
+  } catch (error) {
+    console.error(
+      `Error fetching peer dependencies for ${packageName}@${version}:`,
+      error.message
+    );
+    return {};
+  }
 }
 
 /**
- * Find compatible versions of a package for given Angular version
+ * Find versions of `packageName` compatible with a given Angular version.
+ *
+ * ⚡ Performance: fetches abbreviated metadata ONCE (single HTTP request)
+ *    and evaluates all versions in-memory — vs. the previous N+1 approach.
  */
-export async function findCompatiblePackageVersions(packageName, angularVersion, maxResults = 5) {
-    try {
-        const packageData = await getPackageVersions(packageName);
-        const angularMajor = angularVersion.split('.')[0];
-        const compatibleVersions = [];
+export async function findCompatiblePackageVersions(
+  packageName,
+  angularVersion,
+  maxResults = 5
+) {
+  try {
+    const data = await fetchAbbreviated(packageName);
+    const allVersions = stableSortedDesc(Object.keys(data.versions || {}));
+    const angularMajor = angularVersion.split('.')[0];
+    const compatible = [];
 
-        // Check versions from newest to oldest
-        for (const version of packageData.versions) {
-            if (compatibleVersions.length >= maxResults) break;
+    for (const version of allVersions) {
+      if (compatible.length >= maxResults) break;
 
-            const peerDeps = await getPackagePeerDependencies(packageName, version);
-            
-            // Check if this version is compatible with the Angular version
-            if (peerDeps['@angular/core'] || peerDeps['@angular/common']) {
-                const angularDep = peerDeps['@angular/core'] || peerDeps['@angular/common'];
-                
-                // Simple check: see if the Angular major version is mentioned in the peer dependency
-                if (angularDep.includes(`^${angularMajor}.`) || 
-                    angularDep.includes(`~${angularMajor}.`) || 
-                    angularDep.includes(`>=${angularMajor}.`) ||
-                    angularDep.includes(`${angularMajor}.x`)) {
-                    compatibleVersions.push({
-                        version: version,
-                        peerDependency: angularDep
-                    });
-                }
-            } else {
-                // Package doesn't have Angular peer dependencies, it's likely compatible
-                compatibleVersions.push({
-                    version: version,
-                    peerDependency: 'No Angular peer dependency'
-                });
-            }
+      const peers = data.versions[version]?.peerDependencies || {};
+      const angularDep = peers['@angular/core'] || peers['@angular/common'];
+
+      if (angularDep) {
+        if (
+          angularDep.includes(`^${angularMajor}.`) ||
+          angularDep.includes(`~${angularMajor}.`) ||
+          angularDep.includes(`>=${angularMajor}.`) ||
+          angularDep.includes(`${angularMajor}.x`)
+        ) {
+          compatible.push({ version, peerDependency: angularDep });
         }
-
-        return compatibleVersions;
-    } catch (error) {
-        console.error(`Error finding compatible versions for ${packageName}:`, error.message);
-        return [];
+      } else {
+        compatible.push({ version, peerDependency: 'No Angular peer dependency' });
+      }
     }
+
+    return compatible;
+  } catch (error) {
+    console.error(
+      `Error finding compatible versions for ${packageName}:`,
+      error.message
+    );
+    return [];
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Lifecycle
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Flush all cached data. */
+export function clearCache() {
+  cache.clear();
+}
+
+/** Destroy keep-alive sockets (call on process exit if needed). */
+export function destroy() {
+  cache.clear();
+  httpAgent.destroy();
+  httpsAgent.destroy();
 }

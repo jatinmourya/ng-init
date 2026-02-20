@@ -4,234 +4,249 @@ import chalk from 'chalk';
 import { execa } from 'execa';
 import ora from 'ora';
 
+// ═══════════════════════════════════════════════════════════════════════
+//  Constants
+// ═══════════════════════════════════════════════════════════════════════
+
+const INVALID_CHARS_RE = /[<>:"|?*\x00-\x1f]/;
+
+/** Windows reserved device names — O(1) lookup via Set. */
+const RESERVED_NAMES = new Set([
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+]);
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Internal Helpers
+// ═══════════════════════════════════════════════════════════════════════
+
 /**
- * Initialize Git repository
+ * Write a single file, creating parent directories as needed.
+ *
+ * Extracted from 4 near-identical public functions:
+ *   createGitignore, createReadme, createChangelog, and createProjectFiles.
+ *
+ * @param {string}        fullPath  Absolute file path
+ * @param {string|object} content   String written as-is; objects JSON-stringified
  */
-export async function initGitRepo(projectPath) {
-    const spinner = ora('Initializing Git repository...').start();
-    
-    try {
-        await execa('git', ['init'], { cwd: projectPath });
-        spinner.succeed('Git repository initialized');
-        return true;
-    } catch (error) {
-        spinner.fail('Failed to initialize Git repository');
-        console.error(chalk.red(error.message));
-        return false;
-    }
+async function writeFile(fullPath, content) {
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  const text = typeof content === 'string'
+    ? content
+    : JSON.stringify(content, null, 2);
+  await fs.writeFile(fullPath, text, 'utf-8');
 }
 
 /**
- * Create .gitignore file
+ * Write a named file into a project directory.
+ * Logs success/failure and returns a boolean.
+ *
+ * Replaces `createGitignore`, `createReadme`, `createChangelog`
+ * which were copy-paste variants differing only in the filename.
  */
-export async function createGitignore(projectPath, content) {
-    try {
-        const gitignorePath = path.join(projectPath, '.gitignore');
-        await fs.writeFile(gitignorePath, content, 'utf-8');
-        console.log(chalk.green('✓ Created .gitignore'));
-        return true;
-    } catch (error) {
-        console.error(chalk.red('Failed to create .gitignore:'), error.message);
-        return false;
-    }
+async function writeProjectFile(projectPath, fileName, content) {
+  try {
+    await writeFile(path.join(projectPath, fileName), content);
+    console.log(chalk.green(`✓ Created ${fileName}`));
+    return true;
+  } catch (err) {
+    console.error(chalk.red(`Failed to create ${fileName}:`), err.message);
+    return false;
+  }
 }
 
 /**
- * Create initial commit
+ * Run a spinner-wrapped async task.
+ * Reduces the repeated start/succeed/fail/console.error pattern.
  */
-export async function createInitialCommit(projectPath, message) {
-    const spinner = ora('Creating initial commit...').start();
-    
-    try {
-        await execa('git', ['add', '.'], { cwd: projectPath });
-        await execa('git', ['commit', '-m', message], { cwd: projectPath });
-        spinner.succeed('Initial commit created');
-        return true;
-    } catch (error) {
-        spinner.fail('Failed to create initial commit');
-        console.error(chalk.red(error.message));
-        return false;
-    }
+async function withSpinner(label, fn) {
+  const spinner = ora(label).start();
+  try {
+    await fn();
+    spinner.succeed();
+    return true;
+  } catch (err) {
+    spinner.fail();
+    console.error(chalk.red(err.message));
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Public API — Git Operations
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Initialize a Git repository in the given directory. */
+export function initGitRepo(projectPath) {
+  return withSpinner('Initializing Git repository…', () =>
+    execa('git', ['init'], { cwd: projectPath }),
+  );
+}
+
+/** Stage all files and create an initial commit. */
+export function createInitialCommit(projectPath, message) {
+  return withSpinner('Creating initial commit…', async () => {
+    await execa('git', ['add', '.'], { cwd: projectPath });
+    await execa('git', ['commit', '-m', message], { cwd: projectPath });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Public API — Single-File Writers
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Create a `.gitignore` in the project root. */
+export function createGitignore(projectPath, content) {
+  return writeProjectFile(projectPath, '.gitignore', content);
+}
+
+/** Create a `README.md` in the project root. */
+export function createReadme(projectPath, content) {
+  return writeProjectFile(projectPath, 'README.md', content);
+}
+
+/** Create a `CHANGELOG.md` in the project root. */
+export function createChangelog(projectPath, content) {
+  return writeProjectFile(projectPath, 'CHANGELOG.md', content);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Public API — Bulk Directory & File Creation
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Create multiple directories inside a project.
+ *
+ * ⚡ All directories created in **parallel** (independent `mkdir -p` calls).
+ */
+export function createProjectFolders(projectPath, folders) {
+  return withSpinner('Creating project structure…', () =>
+    Promise.all(
+      folders.map(f => fs.mkdir(path.join(projectPath, f), { recursive: true })),
+    ),
+  );
 }
 
 /**
- * Create project folders
- */
-export async function createProjectFolders(projectPath, folders) {
-    const spinner = ora('Creating project structure...').start();
-    
-    try {
-        for (const folder of folders) {
-            const folderPath = path.join(projectPath, folder);
-            await fs.mkdir(folderPath, { recursive: true });
-        }
-        spinner.succeed('Project structure created');
-        return true;
-    } catch (error) {
-        spinner.fail('Failed to create project structure');
-        console.error(chalk.red(error.message));
-        return false;
-    }
-}
-
-/**
- * Create project files
+ * Create multiple files inside a project.
+ *
+ * ⚡ All files written in **parallel** — each call ensures its own
+ *    parent directory, so order doesn't matter.
+ *
+ * @param {Record<string, string | object>} files  Map of relative path → content
  */
 export async function createProjectFiles(projectPath, files) {
-    try {
-        for (const [filePath, content] of Object.entries(files)) {
-            const fullPath = path.join(projectPath, filePath);
-            const dir = path.dirname(fullPath);
-            
-            // Ensure directory exists
-            await fs.mkdir(dir, { recursive: true });
-            
-            // Write file
-            const fileContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
-            await fs.writeFile(fullPath, fileContent, 'utf-8');
-        }
-        console.log(chalk.green(`✓ Created ${Object.keys(files).length} file(s)`));
-        return true;
-    } catch (error) {
-        console.error(chalk.red('Failed to create project files:'), error.message);
-        return false;
-    }
+  const entries = Object.entries(files);
+
+  try {
+    await Promise.all(
+      entries.map(([rel, content]) => writeFile(path.join(projectPath, rel), content)),
+    );
+    console.log(chalk.green(`✓ Created ${entries.length} file(s)`));
+    return true;
+  } catch (err) {
+    console.error(chalk.red('Failed to create project files:'), err.message);
+    return false;
+  }
 }
 
-/**
- * Create README.md
- */
-export async function createReadme(projectPath, content) {
-    try {
-        const readmePath = path.join(projectPath, 'README.md');
-        await fs.writeFile(readmePath, content, 'utf-8');
-        console.log(chalk.green('✓ Created README.md'));
-        return true;
-    } catch (error) {
-        console.error(chalk.red('Failed to create README.md:'), error.message);
-        return false;
-    }
-}
+// ═══════════════════════════════════════════════════════════════════════
+//  Public API — Directory Utilities
+// ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Create CHANGELOG.md
- */
-export async function createChangelog(projectPath, content) {
-    try {
-        const changelogPath = path.join(projectPath, 'CHANGELOG.md');
-        await fs.writeFile(changelogPath, content, 'utf-8');
-        console.log(chalk.green('✓ Created CHANGELOG.md'));
-        return true;
-    } catch (error) {
-        console.error(chalk.red('Failed to create CHANGELOG.md:'), error.message);
-        return false;
-    }
-}
-
-/**
- * Check if directory exists and is empty
+ * Check if a directory is empty (or doesn't exist).
  */
 export async function isDirectoryEmpty(dirPath) {
-    try {
-        const files = await fs.readdir(dirPath);
-        return files.length === 0;
-    } catch (error) {
-        // Directory doesn't exist
-        return true;
-    }
+  try {
+    const entries = await fs.readdir(dirPath);
+    return entries.length === 0;
+  } catch {
+    // Doesn't exist → treat as empty
+    return true;
+  }
 }
 
 /**
- * Create directory if it doesn't exist
+ * Create a directory (and parents) if it doesn't already exist.
  */
 export async function ensureDirectory(dirPath) {
-    try {
-        await fs.mkdir(dirPath, { recursive: true });
-        return true;
-    } catch (error) {
-        console.error(chalk.red('Failed to create directory:'), error.message);
-        return false;
-    }
+  try {
+    await fs.mkdir(dirPath, { recursive: true });
+    return true;
+  } catch (err) {
+    console.error(chalk.red('Failed to create directory:'), err.message);
+    return false;
+  }
 }
 
 /**
- * Validate directory name
+ * Validate a directory name for cross-platform safety.
+ * @returns {true | string}  `true` if valid, or an error message string.
  */
 export function validateDirectoryName(name) {
-    // Check for invalid characters
-    const invalidChars = /[<>:"|?*\x00-\x1f]/;
-    if (invalidChars.test(name)) {
-        return 'Directory name contains invalid characters';
-    }
-
-    // Check for reserved names (Windows)
-    const reserved = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'];
-    if (reserved.includes(name.toUpperCase())) {
-        return 'Directory name is reserved';
-    }
-
-    // Check for valid length
-    if (name.length === 0) {
-        return 'Directory name cannot be empty';
-    }
-
-    if (name.length > 255) {
-        return 'Directory name is too long';
-    }
-
-    // Check for trailing spaces or periods (Windows restriction)
-    if (name.endsWith(' ') || name.endsWith('.')) {
-        return 'Directory name cannot end with a space or period';
-    }
-
-    return true;
+  if (!name || name.length === 0) return 'Directory name cannot be empty';
+  if (name.length > 255) return 'Directory name is too long';
+  if (INVALID_CHARS_RE.test(name)) return 'Directory name contains invalid characters';
+  if (RESERVED_NAMES.has(name.toUpperCase())) return 'Directory name is reserved';
+  if (name.endsWith(' ') || name.endsWith('.')) {
+    return 'Directory name cannot end with a space or period';
+  }
+  return true;
 }
 
-/**
- * Update package.json scripts
- */
-export async function updatePackageJsonScripts(projectPath, scripts) {
-    try {
-        const packageJsonPath = path.join(projectPath, 'package.json');
-        const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
-        
-        packageJson.scripts = {
-            ...packageJson.scripts,
-            ...scripts
-        };
-        
-        await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8');
-        console.log(chalk.green('✓ Updated package.json scripts'));
-        return true;
-    } catch (error) {
-        console.error(chalk.red('Failed to update package.json:'), error.message);
-        return false;
-    }
-}
+// ═══════════════════════════════════════════════════════════════════════
+//  Public API — package.json Helpers
+// ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Read package.json
+ * Read and parse a project's `package.json`.
+ * @returns {Promise<object | null>}
  */
 export async function readPackageJson(projectPath) {
-    try {
-        const packageJsonPath = path.join(projectPath, 'package.json');
-        const content = await fs.readFile(packageJsonPath, 'utf-8');
-        return JSON.parse(content);
-    } catch (error) {
-        return null;
-    }
+  try {
+    const content = await fs.readFile(path.join(projectPath, 'package.json'), 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Write package.json
+ * Write an object to a project's `package.json`.
  */
 export async function writePackageJson(projectPath, content) {
-    try {
-        const packageJsonPath = path.join(projectPath, 'package.json');
-        await fs.writeFile(packageJsonPath, JSON.stringify(content, null, 2), 'utf-8');
-        return true;
-    } catch (error) {
-        console.error(chalk.red('Failed to write package.json:'), error.message);
-        return false;
-    }
+  try {
+    await fs.writeFile(
+      path.join(projectPath, 'package.json'),
+      JSON.stringify(content, null, 2),
+      'utf-8',
+    );
+    return true;
+  } catch (err) {
+    console.error(chalk.red('Failed to write package.json:'), err.message);
+    return false;
+  }
+}
+
+/**
+ * Merge additional scripts into an existing `package.json`.
+ *
+ * Reuses `readPackageJson` / `writePackageJson` instead of duplicating
+ * the read-parse-write cycle inline.
+ */
+export async function updatePackageJsonScripts(projectPath, scripts) {
+  const pkg = await readPackageJson(projectPath);
+
+  if (!pkg) {
+    console.error(chalk.red('Failed to read package.json'));
+    return false;
+  }
+
+  pkg.scripts = { ...pkg.scripts, ...scripts };
+
+  const ok = await writePackageJson(projectPath, pkg);
+  if (ok) console.log(chalk.green('✓ Updated package.json scripts'));
+  return ok;
 }

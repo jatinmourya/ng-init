@@ -1,154 +1,176 @@
 import { Command } from 'commander';
-import { runCli } from './runner.js';
-import { listProfiles, loadProfile, deleteProfile, displayProfileInfo, exportProfile, importProfile, getProfileDetails } from './utils/profile-manager.js';
-import { printObjectList } from './utils/table-helper.js';
 import chalk from 'chalk';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
+// ═══════════════════════════════════════════════════════════════════════
+//  Package metadata (read once at module load)
+// ═══════════════════════════════════════════════════════════════════════
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(
+  readFileSync(join(__dirname, '../package.json'), 'utf-8'),
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Helpers
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Wrap an async commander action with consistent error handling.
+ *
+ * Every subcommand had an identical try/catch that logged
+ * `chalk.red('Error <verb> profile:')` — this removes that duplication
+ * and guarantees a non-zero exit code on failure.
+ */
+function action(fn) {
+  return async (...args) => {
+    try {
+      await fn(...args);
+    } catch (err) {
+      console.error(chalk.red('Error:'), err.message);
+      process.exitCode = 1;
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  CLI Definition
+// ═══════════════════════════════════════════════════════════════════════
 
 const program = new Command();
 
 program
-    .name('ng-init')
-    .description('Angular project initializer with intelligent version management and automation')
-    .version(packageJson.version);
+  .name('ng-init')
+  .description('Angular project initializer with intelligent version management and automation')
+  .version(version);
 
-// Main command - create new project
+// ── Default command: create ─────────────────────────────────────────
+
 program
-    .command('create', { isDefault: true })
-    .alias('new')
-    .description('Create a new Angular project with interactive setup')
-    .action(() => {
-        runCli();
-    });
+  .command('create', { isDefault: true })
+  .alias('new')
+  .description('Create a new Angular project with interactive setup')
+  .action(action(async () => {
+    const { runCli } = await import('./runner.js');
+    await runCli();
+  }));
 
-// Profile management commands
-const profileCommand = program
-    .command('profile')
-    .description('Manage configuration profiles');
+// ── Profile management ─────────────────────────────────────────────
 
-profileCommand
-    .command('list')
-    .description('List all saved profiles')
-    .action(async () => {
-        try {
-            const profiles = await listProfiles();
-            
-            if (profiles.length === 0) {
-                console.log(chalk.yellow('No saved profiles found.'));
-                return;
-            }
+const profile = program
+  .command('profile')
+  .description('Manage configuration profiles');
 
-            const rows = [];
-            for (const name of profiles) {
-                const details = await getProfileDetails(name);
-                rows.push({ Name: details.name, Angular: details.angularVersion || '-', Libraries: details.libraries || 0, Created: details.createdAt || '-' });
-            }
-            printObjectList('Saved Profiles', rows, ['Name', 'Angular', 'Libraries', 'Created']);
-        } catch (error) {
-            console.error(chalk.red('Error listing profiles:'), error.message);
-        }
-    });
+profile
+  .command('list')
+  .description('List all saved profiles')
+  .action(action(async () => {
+    const { listProfiles, getProfileDetails } = await import('./utils/profile-manager.js');
+    const { printObjectList } = await import('./utils/table-helper.js');
 
-profileCommand
-    .command('show <name>')
-    .description('Show details of a profile')
-    .action(async (name) => {
-        try {
-            const profile = await loadProfile(name);
-            
-            if (!profile) {
-                console.log(chalk.red(`Profile "${name}" not found.`));
-                return;
-            }
+    const names = await listProfiles();
 
-            displayProfileInfo(name, profile);
-        } catch (error) {
-            console.error(chalk.red('Error loading profile:'), error.message);
-        }
-    });
+    if (names.length === 0) {
+      console.log(chalk.yellow('No saved profiles found.'));
+      return;
+    }
 
-profileCommand
-    .command('delete <name>')
-    .description('Delete a profile')
-    .action(async (name) => {
-        try {
-            await deleteProfile(name);
-        } catch (error) {
-            console.error(chalk.red('Error deleting profile:'), error.message);
-        }
-    });
+    const rows = await Promise.all(
+      names.map(async name => {
+        const d = await getProfileDetails(name);
+        return {
+          Name: d.name,
+          Angular: d.angularVersion || '-',
+          Libraries: d.libraries ?? 0,
+          Created: d.createdAt || '-',
+        };
+      }),
+    );
 
-profileCommand
-    .command('export <name> <output>')
-    .description('Export a profile to a file')
-    .action(async (name, output) => {
-        try {
-            await exportProfile(name, output);
-        } catch (error) {
-            console.error(chalk.red('Error exporting profile:'), error.message);
-        }
-    });
+    printObjectList('Saved Profiles', rows, ['Name', 'Angular', 'Libraries', 'Created']);
+  }));
 
-profileCommand
-    .command('import <file>')
-    .description('Import a profile from a file')
-    .action(async (file) => {
-        try {
-            await importProfile(file);
-        } catch (error) {
-            console.error(chalk.red('Error importing profile:'), error.message);
-        }
-    });
+profile
+  .command('show <name>')
+  .description('Show details of a profile')
+  .action(action(async (name) => {
+    const { loadProfile, displayProfileInfo } = await import('./utils/profile-manager.js');
 
-// Version check command
+    const p = await loadProfile(name);
+    if (!p) {
+      console.log(chalk.red(`Profile "${name}" not found.`));
+      return;
+    }
+
+    displayProfileInfo(name, p);
+  }));
+
+profile
+  .command('delete <name>')
+  .description('Delete a profile')
+  .action(action(async (name) => {
+    const { deleteProfile } = await import('./utils/profile-manager.js');
+    await deleteProfile(name);
+  }));
+
+profile
+  .command('export <name> <output>')
+  .description('Export a profile to a file')
+  .action(action(async (name, output) => {
+    const { exportProfile } = await import('./utils/profile-manager.js');
+    await exportProfile(name, output);
+  }));
+
+profile
+  .command('import <file>')
+  .description('Import a profile from a file')
+  .action(action(async (file) => {
+    const { importProfile } = await import('./utils/profile-manager.js');
+    await importProfile(file);
+  }));
+
+// ── System check ────────────────────────────────────────────────────
+
 program
-    .command('check')
-    .description('Check system versions and compatibility')
-    .action(async () => {
-        try {
-            const { displaySystemVersions } = await import('./utils/version-checker.js');
-            await displaySystemVersions();
-        } catch (error) {
-            console.error(chalk.red('Error checking versions:'), error.message);
-        }
-    });
+  .command('check')
+  .description('Check system versions and compatibility')
+  .action(action(async () => {
+    const { displaySystemVersions } = await import('./utils/version-checker.js');
+    await displaySystemVersions();
+  }));
 
-// Help command with examples
+// ── Examples ────────────────────────────────────────────────────────
+
 program
-    .command('examples')
-    .description('Show usage examples')
-    .action(() => {
-        console.log(chalk.bold.cyan('\n📚 Usage Examples:\n'));
-        console.log(chalk.gray('━'.repeat(50)));
-        console.log(chalk.white('Create new project (interactive):'));
-        console.log(chalk.green('  $ ng-init') + chalk.gray(' or ') + chalk.green('ng-init create\n'));
-        
-        console.log(chalk.white('Check system versions:'));
-        console.log(chalk.green('  $ ng-init check\n'));
-        
-        console.log(chalk.white('List saved profiles:'));
-        console.log(chalk.green('  $ ng-init profile list\n'));
-        
-        console.log(chalk.white('Show profile details:'));
-        console.log(chalk.green('  $ ng-init profile show my-profile\n'));
-        
-        console.log(chalk.white('Delete a profile:'));
-        console.log(chalk.green('  $ ng-init profile delete my-profile\n'));
-        
-        console.log(chalk.white('Export a profile:'));
-        console.log(chalk.green('  $ ng-init profile export my-profile ./profile.json\n'));
-        
-        console.log(chalk.white('Import a profile:'));
-        console.log(chalk.green('  $ ng-init profile import ./profile.json\n'));
-        
-        console.log(chalk.gray('━'.repeat(50)) + '\n');
-    });
+  .command('examples')
+  .description('Show usage examples')
+  .action(() => {
+    const divider = chalk.gray('━'.repeat(50));
+    const examples = [
+      ['Create new project (interactive)', 'ng-init', 'or ng-init create'],
+      ['Check system versions', 'ng-init check'],
+      ['List saved profiles', 'ng-init profile list'],
+      ['Show profile details', 'ng-init profile show my-profile'],
+      ['Delete a profile', 'ng-init profile delete my-profile'],
+      ['Export a profile', 'ng-init profile export my-profile ./profile.json'],
+      ['Import a profile', 'ng-init profile import ./profile.json'],
+    ];
+
+    console.log(chalk.bold.cyan('\n📚 Usage Examples:\n'));
+    console.log(divider);
+
+    for (const [desc, cmd, alt] of examples) {
+      console.log(chalk.white(`${desc}:`));
+      console.log(chalk.green(`  $ ${cmd}`) + (alt ? chalk.gray(` ${alt}`) : '') + '\n');
+    }
+
+    console.log(divider + '\n');
+  });
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Parse & Run
+// ═══════════════════════════════════════════════════════════════════════
 
 program.parse(process.argv);
-

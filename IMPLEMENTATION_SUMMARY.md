@@ -219,7 +219,6 @@ ng-init/
 - **chalk** (^5.3.0) - Terminal color output
 - **commander** (^13.1.0) - CLI framework
 - **execa** (^9.6.1) - Execute shell commands
-- **lodash.debounce** (^4.0.8) - Search debouncing
 - **ora** (^8.0.1) - Spinners and progress
 - **semver** (^7.5.4) - Version comparison and compatibility checking
 

@@ -241,7 +241,7 @@ After project creation:
 - **CLI Framework**: Commander.js
 - **Interactive Prompts**: @inquirer/prompts
 - **HTTP Requests**: Axios
-- **Debouncing**: lodash.debounce (for search optimization)
+- **Debouncing**: for search optimization
 - **Spinners/Progress**: Ora
 - **Styling**: Chalk for colored output
 - **Version Comparison**: Semver

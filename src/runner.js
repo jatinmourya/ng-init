@@ -1,440 +1,410 @@
-import { select, input, confirm, checkbox } from '@inquirer/prompts';
+import { select, input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import path from 'path';
-import { displaySystemVersions, getNodeVersion, isNvmInstalled, switchNodeVersion, installNodeVersion, getInstalledNodeVersions } from './utils/version-checker.js';
-import { getAngularVersions, getNodeRequirementsForAngular, getMajorVersions, getMinorVersionsForMajor, getPatchVersionsForMinor } from './utils/npm-search.js';
-import { checkNodeCompatibility, displayCompatibilityStatus, findCompatibleVersions, getRecommendedNodeVersion, resolveLibraryVersionsAsync } from './utils/compatibility.js';
-import { createAngularProject, installPackages, runNpmInstall, installNodeWithWinget, displayNvmInstallGuide } from './utils/installer.js';
-import { interactiveLibrarySearch, simpleLibraryInput, askLibrarySearchPreference } from './utils/prompt-handler.js';
-import { validateDirectoryName } from './utils/file-utils.js';
-import { saveProfile, loadProfile, listProfiles, displayProfileInfo } from './utils/profile-manager.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
+import {
+  displaySystemVersions, getNodeVersion, isNvmInstalled,
+  switchNodeVersion, installNodeVersion, getInstalledNodeVersions,
+} from './utils/version-checker.js';
+import { getAngularVersions, getNodeRequirementsForAngular } from './utils/npm-search.js';
+import {
+  checkNodeCompatibility, displayCompatibilityStatus,
+  findCompatibleVersions, getRecommendedNodeVersion,
+  resolveLibraryVersionsAsync,
+} from './utils/compatibility.js';
+import {
+  createAngularProject, installPackages, runNpmInstall,
+  installNodeWithWinget, displayNvmInstallGuide,
+} from './utils/installer.js';
+import {
+  interactiveLibrarySearch, simpleLibraryInput,
+  askLibrarySearchPreference, selectVersionInteractively,
+} from './utils/prompt-handler.js';
+import { validateDirectoryName } from './utils/file-utils.js';
+import { saveProfile, loadProfile, listProfiles, displayProfileInfo } from './utils/profile-manager.js';
+import { printKeyValue, printObjectList } from './utils/table-helper.js';
+
+// ═══════════════════════════════════════════════════════════════════════
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageJson = JSON.parse(
+  readFileSync(path.join(__dirname, '../package.json'), 'utf-8'),
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Main CLI Flow
+// ═══════════════════════════════════════════════════════════════════════
 
 export async function runCli() {
-    try {
-        // Display welcome banner
-        const text = `Angular Project Initialization Automation CLI v${packageJson.version}`;
-        const width = 60;
+  try {
+    // ── Welcome Banner ──────────────────────────────────────
+    displayBanner();
 
-        const line = "═".repeat(width);
-        const space = width - text.length;
+    // ── Step 1: System info ─────────────────────────────────
+    await displaySystemVersions();
 
-        console.log(chalk.cyan.bold(`
+    // 🚀 Prefetch Angular versions in background while user interacts with profile prompt
+    const angularVersionsPromise = getAngularVersions();
+
+    // ── Step 2: Profile selection ───────────────────────────
+    let config = {};
+
+    if (await confirm({ message: 'Would you like to use a saved profile?', default: false })) {
+      config = await handleProfileSelection();
+    }
+
+    // ── Step 3: Angular version ─────────────────────────────
+    if (!config.angularVersion) {
+      console.log(chalk.bold.cyan('\n📦 Fetching Angular versions…\n'));
+
+      const angularVersions = await angularVersionsPromise;   // ← already in-flight
+
+      if (angularVersions.versions.length === 0) {
+        console.log(chalk.red('Failed to fetch Angular versions. Check your internet connection.'));
+        process.exit(1);
+      }
+
+      const selected = await selectVersionInteractively('Angular', angularVersions);
+      if (!selected) { console.log(chalk.red('No version selected.')); process.exit(1); }
+
+      config.angularVersion = selected;
+    }
+
+    console.log(chalk.green(`\n✓ Selected Angular version: ${config.angularVersion}\n`));
+
+    // ── Step 4: Node.js compatibility (parallel fetch) ──────
+    const [nodeRequirement, currentNodeVersion] = await Promise.all([
+      getNodeRequirementsForAngular(config.angularVersion),
+      getNodeVersion(),
+    ]);
+
+    const compatibility = checkNodeCompatibility(currentNodeVersion, nodeRequirement);
+    displayCompatibilityStatus(compatibility);
+
+    // ── Step 5: Handle incompatibility ──────────────────────
+    if (!compatibility.compatible) {
+      await handleNodeIncompatibility(nodeRequirement);
+    }
+
+    // ── Step 6: Project name ────────────────────────────────
+    if (!config.projectName) {
+      config.projectName = await input({
+        message: 'Enter project name:',
+        validate: value => {
+          if (!value) return 'Project name is required';
+          const result = validateDirectoryName(value);
+          return result === true ? true : result;
+        },
+      });
+    }
+
+    // ── Step 7: Project location ────────────────────────────
+    if (!config.location) {
+      const choice = await select({
+        message: 'Where would you like to create the project?',
+        choices: [
+          { name: 'Current directory', value: 'current' },
+          { name: 'Specify custom directory', value: 'custom' },
+        ],
+      });
+
+      config.location = choice === 'custom'
+        ? await input({ message: 'Enter directory path:', default: process.cwd() })
+        : process.cwd();
+    }
+
+    const projectPath = path.join(config.location, config.projectName);
+
+    // ── Step 8: Project options ─────────────────────────────
+    if (!config.options) {
+      config.options = await promptProjectOptions();
+    }
+
+    // ── Step 9: Library selection ───────────────────────────
+    if (!config.libraries) {
+      const method = await askLibrarySearchPreference();
+      config.libraries =
+        method === 'interactive' ? await interactiveLibrarySearch(config.angularVersion) :
+          method === 'manual' ? await simpleLibraryInput(config.angularVersion) :
+            [];
+    }
+
+    config.features = [];
+
+    // ── Step 10: Save profile ───────────────────────────────
+    if (await confirm({ message: 'Save this configuration as a profile?', default: false })) {
+      const name = await input({
+        message: 'Enter profile name:',
+        validate: v => (v ? true : 'Profile name is required'),
+      });
+      await saveProfile(name, config);
+    }
+
+    // ── Step 11: Summary & confirm ──────────────────────────
+    printKeyValue('📋 Project Configuration Summary', [
+      ['Project Name', chalk.green(config.projectName)],
+      ['Location', chalk.cyan(projectPath)],
+      ['Angular Version', chalk.green(config.angularVersion)],
+      ['Style', chalk.cyan(config.options.style)],
+      ['Routing', chalk.cyan(config.options.routing ? 'Yes' : 'No')],
+      ['Strict Mode', chalk.cyan(config.options.strict ? 'Yes' : 'No')],
+      ['Standalone', chalk.cyan(config.options.standalone ? 'Yes' : 'No')],
+      ['Libraries', chalk.cyan(String(config.libraries.length))],
+    ]);
+
+    if (!await confirm({ message: 'Create project with this configuration?', default: true })) {
+      console.log(chalk.yellow('Project creation cancelled.\n'));
+      process.exit(0);
+    }
+
+    // ── Step 12: Create project + resolve libraries (parallel) ──
+    console.log(chalk.bold.cyan('\n🚀 Creating Angular project…\n'));
+
+    const [created, resolvedLibraries] = await Promise.all([
+      createAngularProject(
+        config.projectName,
+        config.angularVersion,
+        { ...config.options, skipInstall: true },
+      ),
+      config.libraries.length > 0
+        ? resolveLibraryVersionsAsync(config.libraries, config.angularVersion)
+        : Promise.resolve([]),
+    ]);
+
+    if (!created) {
+      console.log(chalk.red('Failed to create Angular project.'));
+      process.exit(1);
+    }
+
+    // ── Step 13: Install libraries ──────────────────────────
+    if (resolvedLibraries.length > 0) {
+      await installResolvedLibraries(resolvedLibraries, projectPath);
+    }
+
+    // ── Step 14: npm install ────────────────────────────────
+    console.log(chalk.bold.cyan('\n📥 Installing dependencies…\n'));
+    await runNpmInstall(projectPath);
+
+    // ── Done ────────────────────────────────────────────────
+    displaySuccessMessage(config.projectName);
+
+  } catch (err) {
+    if (err.name === 'ExitPromptError') {
+      console.log(chalk.yellow('\nExited.\n'));
+      process.exit(0);
+    }
+    console.error(chalk.red('\n❌ Error:'), err.message);
+    process.exit(1);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Extracted Helpers — keep runCli() readable
+// ═══════════════════════════════════════════════════════════════════════
+
+function displayBanner() {
+  const title = `Angular Project Initialization Automation CLI v${packageJson.version}`;
+  const width = 60;
+  const pad = width - title.length;
+  const line = '═'.repeat(width);
+
+  console.log(chalk.cyan.bold(`
 ╔${line}╗
-║${" ".repeat(space / 2)}${text}${" ".repeat(Math.ceil(space / 2))}║
+║${' '.repeat(Math.floor(pad / 2))}${title}${' '.repeat(Math.ceil(pad / 2))}║
 ╚${line}╝
 `));
-        // Step 1: Display system versions
-        const systemVersions = await displaySystemVersions();
-
-        // Step 2: Check for saved profiles
-        const useProfile = await confirm({
-            message: 'Would you like to use a saved profile?',
-            default: false
-        });
-
-        let config = {};
-
-        if (useProfile) {
-            const profiles = await listProfiles();
-
-            if (profiles.length === 0) {
-                console.log(chalk.yellow('No saved profiles found. Continuing with manual setup...\n'));
-            } else {
-                const selectedProfile = await select({
-                    message: 'Select a profile:',
-                    choices: profiles.map(p => ({ name: p, value: p }))
-                });
-
-                const profile = await loadProfile(selectedProfile);
-                displayProfileInfo(selectedProfile, profile);
-
-                const confirmProfile = await confirm({
-                    message: 'Use this profile?',
-                    default: true
-                });
-
-                if (confirmProfile) {
-                    config = profile;
-                }
-            }
-        }
-
-        // Step 3: Select Angular version (if not from profile)
-        if (!config.angularVersion) {
-            console.log(chalk.bold.cyan('\n📦 Fetching Angular versions...\n'));
-            const angularVersions = await getAngularVersions();
-
-            if (angularVersions.versions.length === 0) {
-                console.log(chalk.red('Failed to fetch Angular versions. Please check your internet connection.'));
-                process.exit(1);
-            }
-
-            // Step 3.1: Select Major Version
-            const majorVersions = getMajorVersions(angularVersions.versions);
-            const majorChoices = majorVersions.map(major => {
-                const label = `Angular ${major}`;
-                // Check if this major version contains the latest
-                const isLatest = angularVersions.latest && angularVersions.latest.startsWith(`${major}.`);
-                return {
-                    name: isLatest ? `${label} (latest)` : label,
-                    value: major
-                };
-            });
-
-            const majorVersion = await select({
-                message: 'Select Angular major version:',
-                choices: majorChoices,
-                pageSize: 15
-            });
-
-            // Step 3.2: Select Minor Version
-            const minorVersions = getMinorVersionsForMajor(angularVersions.versions, majorVersion);
-            const minorChoices = minorVersions.map(minor => ({
-                name: `v${minor}.x`,
-                value: minor
-            }));
-
-            const minorVersion = await select({
-                message: `Select Angular ${majorVersion} minor version:`,
-                choices: minorChoices,
-                pageSize: 15
-            });
-
-            // Step 3.3: Select Patch Version
-            const patchVersions = getPatchVersionsForMinor(angularVersions.versions, minorVersion);
-            const patchChoices = patchVersions.map(patch => {
-                let label = `v${patch}`;
-                if (patch === angularVersions.latest) label += ' (latest)';
-                if (patch === angularVersions.lts) label += ' (LTS)';
-                return { name: label, value: patch };
-            });
-
-            const patchVersion = await select({
-                message: `Select Angular ${minorVersion} patch version:`,
-                choices: patchChoices,
-                pageSize: 15
-            });
-
-            config.angularVersion = patchVersion;
-        }
-
-        console.log(chalk.green(`\n✓ Selected Angular version: ${config.angularVersion}\n`));
-
-        // Step 4: Check Node.js compatibility
-        const nodeRequirement = await getNodeRequirementsForAngular(config.angularVersion);
-        const currentNodeVersion = await getNodeVersion();
-        const compatibility = checkNodeCompatibility(currentNodeVersion, nodeRequirement);
-
-        displayCompatibilityStatus(compatibility);
-
-        // Step 5: Handle Node version incompatibility
-        if (!compatibility.compatible) {
-            console.log(chalk.yellow('⚠️  Node.js version incompatibility detected!\n'));
-
-            const nvmInstalled = await isNvmInstalled();
-
-            if (nvmInstalled) {
-                console.log(chalk.cyan('✓ nvm detected on your system\n'));
-
-                const installedVersions = await getInstalledNodeVersions();
-                const compatibleInstalled = findCompatibleVersions(installedVersions, nodeRequirement);
-
-                if (compatibleInstalled.length > 0) {
-                    console.log(chalk.green(`Found ${compatibleInstalled.length} compatible Node version(s) installed:\n`));
-
-                    const selectedVersion = await select({
-                        message: 'Select Node version to switch to:',
-                        choices: compatibleInstalled.map(v => ({ name: `v${v}`, value: v }))
-                    });
-
-                    console.log(chalk.cyan(`\nSwitching to Node.js v${selectedVersion}...\n`));
-                    const switched = await switchNodeVersion(selectedVersion);
-
-                    if (!switched) {
-                        console.log(chalk.red('Failed to switch Node version. Please try manually.'));
-                        process.exit(1);
-                    }
-
-                    console.log(chalk.green('✓ Node version switched successfully\n'));
-                } else {
-                    console.log(chalk.yellow('No compatible Node versions installed.\n'));
-                    const recommendedVersion = getRecommendedNodeVersion(nodeRequirement);
-
-                    const shouldInstall = await confirm({
-                        message: `Install Node.js v${recommendedVersion}?`,
-                        default: true
-                    });
-
-                    if (shouldInstall) {
-                        const installed = await installNodeVersion(recommendedVersion);
-
-                        if (!installed) {
-                            console.log(chalk.red('Failed to install Node version.'));
-                            process.exit(1);
-                        }
-
-                        console.log(chalk.green('✓ Node.js installed successfully\n'));
-                        await switchNodeVersion(recommendedVersion);
-                    } else {
-                        console.log(chalk.red('Cannot proceed without compatible Node.js version.'));
-                        process.exit(1);
-                    }
-                }
-            } else {
-                console.log(chalk.yellow('⚠️  nvm is not installed on your system\n'));
-
-                const installMethod = await select({
-                    message: 'How would you like to proceed?',
-                    choices: [
-                        { name: 'Install nvm (Recommended)', value: 'nvm' },
-                        { name: 'Install Node.js directly (Windows only)', value: 'direct' },
-                        { name: 'Exit and install manually', value: 'exit' }
-                    ]
-                });
-
-                if (installMethod === 'nvm') {
-                    displayNvmInstallGuide();
-                    console.log(chalk.yellow('\nPlease install nvm and run this CLI again.\n'));
-                    process.exit(0);
-                } else if (installMethod === 'direct') {
-                    if (process.platform !== 'win32') {
-                        console.log(chalk.red('Direct installation is only supported on Windows.'));
-                        process.exit(1);
-                    }
-
-                    const installed = await installNodeWithWinget('LTS');
-
-                    if (!installed) {
-                        console.log(chalk.red('Failed to install Node.js. Please install manually.'));
-                        process.exit(1);
-                    }
-
-                    console.log(chalk.yellow('\nPlease restart your terminal and run this CLI again.\n'));
-                    process.exit(0);
-                } else {
-                    console.log(chalk.yellow('Exiting. Please install a compatible Node.js version manually.\n'));
-                    process.exit(0);
-                }
-            }
-        }
-
-        // Step 6: Project configuration
-        if (!config.projectName) {
-            config.projectName = await input({
-                message: 'Enter project name:',
-                validate: (value) => {
-                    if (!value) return 'Project name is required';
-                    const validation = validateDirectoryName(value);
-                    return validation === true ? true : validation;
-                }
-            });
-        }
-
-        // Step 7: Project location
-        if (!config.location) {
-            const location = await select({
-                message: 'Where would you like to create the project?',
-                choices: [
-                    { name: 'Current directory', value: 'current' },
-                    { name: 'Specify custom directory', value: 'custom' }
-                ]
-            });
-
-            if (location === 'custom') {
-                config.location = await input({
-                    message: 'Enter directory path:',
-                    default: process.cwd()
-                });
-            } else {
-                config.location = process.cwd();
-            }
-        }
-
-        const projectPath = path.join(config.location, config.projectName);
-
-        // Step 8: Project configuration (if not from profile)
-        if (!config.options) {
-            const routing = await confirm({
-                message: 'Enable routing?',
-                default: true
-            });
-
-            const style = await select({
-                message: 'Select stylesheet format:',
-                choices: [
-                    { name: 'css', value: 'css' },
-                    { name: 'scss', value: 'scss' },
-                    { name: 'sass', value: 'sass' },
-                    { name: 'less', value: 'less' }
-                ]
-            });
-
-            const strict = await confirm({
-                message: 'Enable strict mode?',
-                default: true
-            });
-
-            const standalone = await confirm({
-                message: 'Use standalone components?',
-                default: false
-            });
-
-            config.options = { routing, style, strict, standalone };
-        }
-
-        // Step 9: Library selection (if not from profile)
-        if (!config.libraries) {
-            const libraryMethod = await askLibrarySearchPreference();
-            config.libraries = [];
-
-            if (libraryMethod === 'interactive') {
-                config.libraries = await interactiveLibrarySearch(config.angularVersion);
-            } else if (libraryMethod === 'manual') {
-                config.libraries = await simpleLibraryInput(config.angularVersion);
-            }
-            // Note: Library bundles feature has been disabled
-        }
-
-        // Step 10: Additional features (disabled)
-        // Note: Additional features (git, structure, docs, linting) have been disabled
-        config.features = [];
-
-        // Step 11: Save profile option
-        const shouldSaveProfile = await confirm({
-            message: 'Save this configuration as a profile?',
-            default: false
-        });
-
-        if (shouldSaveProfile) {
-            const profileName = await input({
-                message: 'Enter profile name:',
-                validate: (value) => value ? true : 'Profile name is required'
-            });
-
-            await saveProfile(profileName, config);
-        }
-
-        // Step 12: Confirm and create project
-        const { printKeyValue } = await import('./utils/table-helper.js');
-        const summary = [
-            ['Project Name', chalk.green(config.projectName)],
-            ['Location', chalk.cyan(projectPath)],
-            ['Angular Version', chalk.green(config.angularVersion)],
-            ['Style', chalk.cyan(config.options.style)],
-            ['Routing', chalk.cyan(config.options.routing ? 'Yes' : 'No')],
-            ['Strict Mode', chalk.cyan(config.options.strict ? 'Yes' : 'No')],
-            ['Standalone', chalk.cyan(config.options.standalone ? 'Yes' : 'No')],
-            ['Libraries', chalk.cyan(config.libraries.length)]
-        ];
-
-        printKeyValue('📋 Project Configuration Summary', summary);
-
-        const shouldCreate = await confirm({
-            message: 'Create project with this configuration?',
-            default: true
-        });
-
-        if (!shouldCreate) {
-            console.log(chalk.yellow('Project creation cancelled.\n'));
-            process.exit(0);
-        }
-
-        // Step 13: Create Angular project
-        console.log(chalk.bold.cyan('\n🚀 Creating Angular project...\n'));
-
-        const createOptions = {
-            ...config.options,
-            skipInstall: true
-        };
-
-        const created = await createAngularProject(config.projectName, config.angularVersion, createOptions);
-
-        if (!created) {
-            console.log(chalk.red('Failed to create Angular project.'));
-            process.exit(1);
-        }
-
-        // Step 14: Install libraries
-        if (config.libraries.length > 0) {
-            console.log(chalk.bold.cyan('\n📦 Resolving library versions...\n'));
-
-            // Resolve library versions dynamically for compatibility with Angular version
-            const resolvedLibraries = await resolveLibraryVersionsAsync(config.libraries, config.angularVersion);
-
-            // Show adjusted versions if any
-            const adjusted = resolvedLibraries.filter(lib => lib.adjusted);
-            if (adjusted.length > 0) {
-                const { printObjectList } = await import('./utils/table-helper.js');
-                const rows = adjusted.map(lib => ({ Package: lib.name, From: lib.originalVersion, To: lib.version, Reason: lib.reason || '' }));
-                console.log(chalk.green('✓ Dynamically resolved compatible library versions:\n'));
-                printObjectList('Resolved Library Versions', rows, ['Package', 'From', 'To', 'Reason']);
-            }
-
-            // Show warnings for potentially incompatible libraries
-            const warnings = resolvedLibraries.filter(lib => lib.warning);
-            if (warnings.length > 0) {
-                const { printObjectList } = await import('./utils/table-helper.js');
-                const rows = warnings.map(lib => ({ Package: lib.name, Version: lib.version, Reason: lib.reason || '' }));
-                console.log(chalk.yellow('⚠️  Potential compatibility warnings:\n'));
-                printObjectList('Compatibility Warnings', rows, ['Package', 'Version', 'Reason']);
-            }
-
-            // Separate production and dev packages
-            const prodLibraries = resolvedLibraries.filter(lib => !lib.isDev);
-            const devLibraries = resolvedLibraries.filter(lib => lib.isDev);
-
-            // Install production packages
-            if (prodLibraries.length > 0) {
-                console.log(chalk.bold.cyan('📦 Installing production libraries...\n'));
-                const prodSpecs = prodLibraries.map(lib =>
-                    lib.version === 'latest' ? lib.name : `${lib.name}@${lib.version}`
-                );
-                await installPackages(prodSpecs, projectPath);
-            }
-
-            // Install dev packages
-            if (devLibraries.length > 0) {
-                console.log(chalk.bold.cyan('📦 Installing dev libraries...\n'));
-                const devSpecs = devLibraries.map(lib =>
-                    lib.version === 'latest' ? lib.name : `${lib.name}@${lib.version}`
-                );
-                await installPackages(devSpecs, projectPath, true);
-            }
-        }
-
-        // Step 15: Run npm install
-        console.log(chalk.bold.cyan('\n📥 Installing dependencies...\n'));
-        await runNpmInstall(projectPath);
-
-        // Note: Additional features (project structure, git, docs, eslint, husky) have been disabled
-
-        // Step 22: Display success message
-        console.log(chalk.bold.green('\n✅ Project created successfully! 🎉\n'));
-        console.log(chalk.bold.cyan('📊 Next Steps:\n'));
-        console.log(chalk.gray('━'.repeat(50)));
-        console.log(chalk.white('1. ') + chalk.cyan(`cd ${config.projectName}`));
-        console.log(chalk.white('2. ') + chalk.cyan('ng serve'));
-        console.log(chalk.white('3. ') + chalk.cyan('Open http://localhost:4200 in your browser'));
-        console.log(chalk.gray('━'.repeat(50)));
-
-        console.log(chalk.bold.cyan('\n💡 Useful Commands:\n'));
-        console.log(chalk.gray('  ng generate component <name>    ') + chalk.white('Create a component'));
-        console.log(chalk.gray('  ng generate service <name>      ') + chalk.white('Create a service'));
-        console.log(chalk.gray('  ng build                        ') + chalk.white('Build for production'));
-        console.log(chalk.gray('  ng test                         ') + chalk.white('Run unit tests'));
-        console.log(chalk.gray('  ng help                         ') + chalk.white('Get more help\n'));
-
-        console.log(chalk.bold.green('Happy coding! 🚀\n'));
-
-    } catch (err) {
-        console.error(chalk.red('\n❌ Error:'), err.message);
-        process.exit(1);
+}
+
+async function handleProfileSelection() {
+  const profiles = await listProfiles();
+
+  if (profiles.length === 0) {
+    console.log(chalk.yellow('No saved profiles found. Continuing with manual setup…\n'));
+    return {};
+  }
+
+  const selected = await select({
+    message: 'Select a profile:',
+    choices: profiles.map(p => ({ name: p, value: p })),
+  });
+
+  const profile = await loadProfile(selected);
+  displayProfileInfo(selected, profile);
+
+  return (await confirm({ message: 'Use this profile?', default: true }))
+    ? profile
+    : {};
+}
+
+async function promptProjectOptions() {
+  const routing = await confirm({ message: 'Enable routing?', default: true });
+  const style = await select({
+    message: 'Select stylesheet format:',
+    choices: ['css', 'scss', 'sass', 'less'].map(s => ({ name: s, value: s })),
+  });
+  const strict = await confirm({ message: 'Enable strict mode?', default: true });
+  const standalone = await confirm({ message: 'Use standalone components?', default: false });
+
+  return { routing, style, strict, standalone };
+}
+
+// ── Node Incompatibility ────────────────────────────────────────────
+
+async function handleNodeIncompatibility(nodeRequirement) {
+  console.log(chalk.yellow('⚠️  Node.js version incompatibility detected!\n'));
+
+  if (await isNvmInstalled()) {
+    return handleNvmSwitch(nodeRequirement);
+  }
+
+  console.log(chalk.yellow('⚠️  nvm is not installed on your system\n'));
+
+  const method = await select({
+    message: 'How would you like to proceed?',
+    choices: [
+      { name: 'Install nvm (Recommended)', value: 'nvm' },
+      { name: 'Install Node.js directly (Windows only)', value: 'direct' },
+      { name: 'Exit and install manually', value: 'exit' },
+    ],
+  });
+
+  if (method === 'nvm') {
+    displayNvmInstallGuide();
+    console.log(chalk.yellow('\nPlease install nvm and run this CLI again.\n'));
+    process.exit(0);
+  }
+
+  if (method === 'direct') {
+    if (process.platform !== 'win32') {
+      console.log(chalk.red('Direct installation is only supported on Windows.'));
+      process.exit(1);
     }
+    if (!await installNodeWithWinget('LTS')) {
+      console.log(chalk.red('Failed to install Node.js. Please install manually.'));
+      process.exit(1);
+    }
+    console.log(chalk.yellow('\nPlease restart your terminal and run this CLI again.\n'));
+    process.exit(0);
+  }
+
+  console.log(chalk.yellow('Exiting. Please install a compatible Node.js version manually.\n'));
+  process.exit(0);
+}
+
+async function handleNvmSwitch(nodeRequirement) {
+  console.log(chalk.cyan('✓ nvm detected on your system\n'));
+
+  const installed = await getInstalledNodeVersions();
+  const compatible = findCompatibleVersions(installed, nodeRequirement);
+
+  if (compatible.length > 0) {
+    console.log(chalk.green(`Found ${compatible.length} compatible Node version(s) installed:\n`));
+
+    const version = await select({
+      message: 'Select Node version to switch to:',
+      choices: compatible.map(v => ({ name: `v${v}`, value: v })),
+    });
+
+    console.log(chalk.cyan(`\nSwitching to Node.js v${version}…\n`));
+
+    if (!await switchNodeVersion(version)) {
+      console.log(chalk.red('Failed to switch Node version. Please try manually.'));
+      process.exit(1);
+    }
+
+    console.log(chalk.green('✓ Node version switched successfully\n'));
+    return;
+  }
+
+  console.log(chalk.yellow('No compatible Node versions installed.\n'));
+  const recommended = getRecommendedNodeVersion(nodeRequirement);
+
+  if (!await confirm({ message: `Install Node.js v${recommended}?`, default: true })) {
+    console.log(chalk.red('Cannot proceed without compatible Node.js version.'));
+    process.exit(1);
+  }
+
+  if (!await installNodeVersion(recommended)) {
+    console.log(chalk.red('Failed to install Node version.'));
+    process.exit(1);
+  }
+
+  console.log(chalk.green('✓ Node.js installed successfully\n'));
+  await switchNodeVersion(recommended);
+}
+
+// ── Library Installation ────────────────────────────────────────────
+
+async function installResolvedLibraries(resolvedLibraries, projectPath) {
+  // Show adjusted versions
+  const adjusted = resolvedLibraries.filter(lib => lib.adjusted);
+  if (adjusted.length > 0) {
+    console.log(chalk.green('\n✓ Dynamically resolved compatible library versions:\n'));
+    printObjectList(
+      'Resolved Library Versions',
+      adjusted.map(({ name, originalVersion, version, reason }) => ({
+        Package: name, From: originalVersion, To: version, Reason: reason || '',
+      })),
+      ['Package', 'From', 'To', 'Reason'],
+    );
+  }
+
+  // Show warnings
+  const warnings = resolvedLibraries.filter(lib => lib.warning);
+  if (warnings.length > 0) {
+    console.log(chalk.yellow('\n⚠️  Potential compatibility warnings:\n'));
+    printObjectList(
+      'Compatibility Warnings',
+      warnings.map(({ name, version, reason }) => ({
+        Package: name, Version: version, Reason: reason || '',
+      })),
+      ['Package', 'Version', 'Reason'],
+    );
+  }
+
+  const toSpec = lib => (lib.version === 'latest' ? lib.name : `${lib.name}@${lib.version}`);
+
+  // Production dependencies
+  const prod = resolvedLibraries.filter(lib => !lib.isDev);
+  if (prod.length > 0) {
+    console.log(chalk.bold.cyan('\n📦 Installing production libraries…\n'));
+    await installPackages(prod.map(toSpec), projectPath);
+  }
+
+  // Dev dependencies
+  const dev = resolvedLibraries.filter(lib => lib.isDev);
+  if (dev.length > 0) {
+    console.log(chalk.bold.cyan('\n📦 Installing dev libraries…\n'));
+    await installPackages(dev.map(toSpec), projectPath, true);
+  }
+}
+
+// ── Success Message ─────────────────────────────────────────────────
+
+function displaySuccessMessage(projectName) {
+  const divider = chalk.gray('━'.repeat(50));
+
+  console.log(chalk.bold.green('\n✅ Project created successfully! 🎉\n'));
+  console.log(chalk.bold.cyan('📊 Next Steps:\n'));
+  console.log(divider);
+  console.log(chalk.white('1. ') + chalk.cyan(`cd ${projectName}`));
+  console.log(chalk.white('2. ') + chalk.cyan('ng serve'));
+  console.log(chalk.white('3. ') + chalk.cyan('Open http://localhost:4200 in your browser'));
+  console.log(divider);
+
+  console.log(chalk.bold.cyan('\n💡 Useful Commands:\n'));
+  const cmds = [
+    ['ng generate component <name>', 'Create a component'],
+    ['ng generate service <name>', 'Create a service'],
+    ['ng build', 'Build for production'],
+    ['ng test', 'Run unit tests'],
+    ['ng help', 'Get more help'],
+  ];
+  for (const [cmd, desc] of cmds) {
+    console.log(`${chalk.gray(`  ${cmd.padEnd(34)}`)}${chalk.white(desc)}`);
+  }
+
+  console.log(chalk.bold.green('\nHappy coding! 🚀\n'));
 }

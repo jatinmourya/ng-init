@@ -1,588 +1,441 @@
 import semver from 'semver';
 import chalk from 'chalk';
 import { printKeyValue } from './table-helper.js';
-import axios from 'axios';
+import { fetchAbbreviated } from './npm-search.js';
 
-const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
+// ═══════════════════════════════════════════════════════════════════════
+//  Constants
+// ═══════════════════════════════════════════════════════════════════════
 
-// Cache for npm registry responses to avoid repeated requests
-const packageCache = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_CACHE_SIZE = 100; // Maximum number of cached packages
+/** Peer-dependency keys that indicate Angular coupling (checked in priority order). */
+const ANGULAR_DEP_KEYS = [
+  '@angular/core',
+  '@angular/common',
+  '@angular/platform-browser',
+];
+
+/** Package prefixes that follow Angular's major-version cadence. */
+const ANGULAR_ECOSYSTEM_PREFIXES = [
+  '@angular/',
+  '@ngrx/',
+  '@ngxs/',
+  '@ng-bootstrap/',
+  '@angular-eslint/',
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Internal Helpers
+// ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Check if current Node version is compatible with Angular version
+ * Find the first Angular peer-dependency value in a peerDependencies map.
+ * @returns {string | null}
+ */
+function findAngularPeerDep(peerDeps) {
+  for (const key of ANGULAR_DEP_KEYS) {
+    if (peerDeps[key]) return peerDeps[key];
+  }
+  return null;
+}
+
+/**
+ * Return stable (non-prerelease), valid semver strings from abbreviated
+ * metadata, sorted newest-first.
+ *
+ * Uses `semver.prerelease()` instead of fragile regex — correctly
+ * catches rc, beta, alpha, next, canary, and any other prerelease tag.
+ */
+function stableVersionsDesc(data) {
+  return Object.keys(data.versions || {})
+    .filter(v => semver.valid(v) && !semver.prerelease(v))
+    .sort(semver.rcompare);
+}
+
+/**
+ * Safely check if `version` satisfies `range`.
+ * Falls back to major-version string heuristic when semver
+ * can't parse a non-standard range.
+ */
+function satisfiesSafe(version, range) {
+  try {
+    return semver.satisfies(version, range);
+  } catch {
+    const major = version.split('.')[0];
+    return (
+      range.includes(`^${major}.`) ||
+      range.includes(`~${major}.`) ||
+      range.includes(`>=${major}.`) ||
+      range.includes(`${major}.x`)
+    );
+  }
+}
+
+/**
+ * Check if a package name belongs to the Angular ecosystem
+ * (and therefore follows Angular's major-version cadence).
+ */
+function isEcosystemPackage(name) {
+  return ANGULAR_ECOSYSTEM_PREFIXES.some(p => name.startsWith(p));
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Node.js Compatibility
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Check if the current Node.js version satisfies the required range.
  */
 export function checkNodeCompatibility(currentNodeVersion, requiredNodeVersion) {
-    try {
-        const isCompatible = semver.satisfies(currentNodeVersion, requiredNodeVersion);
-        return {
-            compatible: isCompatible,
-            current: currentNodeVersion,
-            required: requiredNodeVersion
-        };
-    } catch (error) {
-        return {
-            compatible: false,
-            current: currentNodeVersion,
-            required: requiredNodeVersion,
-            error: error.message
-        };
-    }
+  try {
+    return {
+      compatible: semver.satisfies(currentNodeVersion, requiredNodeVersion),
+      current: currentNodeVersion,
+      required: requiredNodeVersion,
+    };
+  } catch (error) {
+    return {
+      compatible: false,
+      current: currentNodeVersion,
+      required: requiredNodeVersion,
+      error: error.message,
+    };
+  }
 }
 
 /**
- * Display compatibility status
+ * Display a formatted compatibility-check table.
+ * @returns {boolean} Whether the versions are compatible.
  */
 export function displayCompatibilityStatus(compatibility) {
-    const rows = [
-        ['Current Node.js', chalk.cyan(`v${compatibility.current}`)],
-        ['Required Node.js', chalk.cyan(compatibility.required)],
-        ['Status', compatibility.compatible ? chalk.green('✓ Compatible') : chalk.red('✗ Incompatible')]
-    ];
-
-    printKeyValue('📋 Compatibility Check', rows);
-
-    return compatibility.compatible;
+  printKeyValue('📋 Compatibility Check', [
+    ['Current Node.js', chalk.cyan(`v${compatibility.current}`)],
+    ['Required Node.js', chalk.cyan(compatibility.required)],
+    ['Status', compatibility.compatible
+      ? chalk.green('✓ Compatible')
+      : chalk.red('✗ Incompatible')],
+  ]);
+  return compatibility.compatible;
 }
 
 /**
- * Find compatible Node versions from available versions
+ * Filter installed Node.js versions to those satisfying a range,
+ * sorted newest-first.
  */
 export function findCompatibleVersions(availableVersions, requiredRange) {
-    try {
-        return availableVersions.filter(version => {
-            try {
-                return semver.satisfies(version, requiredRange);
-            } catch {
-                return false;
-            }
-        }).sort((a, b) => semver.rcompare(a, b)); // Sort descending (newest first)
-    } catch (error) {
-        return [];
-    }
+  return availableVersions
+    .filter(v => {
+      try { return semver.satisfies(v, requiredRange); }
+      catch { return false; }
+    })
+    .sort(semver.rcompare);
 }
 
 /**
- * Get recommended Node version from range (fully dynamic)
- * Extracts the lowest compatible major version and suggests a base version
+ * Extract the minimum compatible Node.js version from a range string.
+ *
+ * Uses `semver.minVersion` for correct parsing of complex OR-ranges
+ * like `^18.0.0 || ^20.0.0 || ^22.0.0` → `18.0.0`.
  */
 export function getRecommendedNodeVersion(requiredRange) {
-    try {
-        const ranges = requiredRange.split('||').map(r => r.trim());
-        
-        // Extract all major versions from the range
-        const majorVersions = [];
-        for (const range of ranges) {
-            const match = range.match(/[~^><=]*\s*(\d+)\./g);
-            if (match) {
-                match.forEach(m => {
-                    const major = parseInt(m.match(/(\d+)/)[1]);
-                    if (!majorVersions.includes(major)) {
-                        majorVersions.push(major);
-                    }
-                });
-            }
-        }
-        
-        if (majorVersions.length === 0) {
-            // If we can't parse, suggest installing latest stable (no hardcoded version)
-            console.log(chalk.yellow('⚠️  Could not parse Node version range. Please install the latest LTS version.'));
-            return null;
-        }
-        
-        // Sort and get the lowest major version (most compatible)
-        majorVersions.sort((a, b) => a - b);
-        const recommendedMajor = majorVersions[0];
-        
-        // Return the major version - let the installer determine the latest patch
-        return `${recommendedMajor}.0.0`;
-    } catch (error) {
-        console.log(chalk.yellow('⚠️  Could not parse Node version range. Please install a compatible version manually.'));
-        return null;
-    }
+  try {
+    const min = semver.minVersion(requiredRange);
+    if (min) return min.version;
+  } catch { /* fall through */ }
+
+  console.log(chalk.yellow(
+    '⚠️  Could not parse Node version range. Please install the latest LTS version.'
+  ));
+  return null;
 }
 
-/**
- * Angular version to Node.js compatibility matrix
- * This is fetched dynamically but we keep a fallback for offline use
- */
-export async function getAngularNodeCompatibility(angularVersion) {
-    try {
-        // Fetch from @angular/cli package to get accurate engine requirements
-        const response = await axios.get(`${NPM_REGISTRY_URL}/@angular/cli/${angularVersion}`, {
-            timeout: 5000
-        });
-        
-        const engines = response.data.engines || {};
-        return engines.node || null;
-    } catch (error) {
-        // Fallback to estimated requirements based on major version
-        return null;
-    }
-}
+// ═══════════════════════════════════════════════════════════════════════
+//  Angular CLI Utilities
+// ═══════════════════════════════════════════════════════════════════════
 
-/**
- * Minimal fallback for when npm registry is unavailable
- * Returns a generic conservative range based on Angular version (fully dynamic)
- */
-function getFallbackNodeRequirement(angularMajor) {
-    // When npm registry is unavailable, we can't determine exact requirements
-    // Return a very conservative range that suggests even major versions (LTS lines)
-    // This is a last-resort fallback and should rarely be used
-    
-    // Generate a range based on the Angular major version
-    // Even Node versions are LTS (12, 14, 16, 18, 20, 22...)
-    // Strategy: suggest 3 Node LTS versions starting from a base derived from Angular version
-    
-    // Calculate base Node version (ensure it's even for LTS)
-    // Use formula: if Angular is 15+, base is around Angular major, otherwise slightly higher
-    let baseNode;
-    if (angularMajor >= 15) {
-        baseNode = Math.floor(angularMajor / 2) * 2; // Ensure even number
-    } else if (angularMajor >= 10) {
-        baseNode = Math.floor((angularMajor + 2) / 2) * 2; // Slightly higher for older Angular
-    } else {
-        baseNode = Math.floor((angularMajor * 1.5) / 2) * 2; // Even older Angular
-    }
-    
-    const node1 = baseNode;
-    const node2 = baseNode + 2;
-    const node3 = baseNode + 4;
-    
-    return `^${node1}.0.0 || ^${node2}.0.0 || ^${node3}.0.0`;
-}
-
-/**
- * Get Node requirement from npm registry (dynamic fetch preferred)
- */
-export async function getNodeRequirementFromMatrix(angularVersion) {
-    // First try to fetch dynamically from npm registry
-    const dynamicRequirement = await getAngularNodeCompatibility(angularVersion);
-    if (dynamicRequirement) {
-        return dynamicRequirement;
-    }
-    
-    // Fallback to conservative estimate based on Angular major version
-    const majorVersion = parseInt(angularVersion.split('.')[0]);
-    console.log(chalk.yellow(`⚠️  Could not fetch Node requirements from npm registry, using fallback for Angular ${majorVersion}`));
-    return getFallbackNodeRequirement(majorVersion);
-}
-
-/**
- * Validate Angular version format
- */
+/** Validate that a string is a well-formed semver. */
 export function isValidAngularVersion(version) {
-    return semver.valid(version) !== null;
+  return semver.valid(version) !== null;
 }
 
-/**
- * Check if Angular CLI is installed globally
- */
-export function needsAngularCli(currentAngularCliVersion, targetAngularVersion) {
-    if (!currentAngularCliVersion) {
-        return {
-            needed: true,
-            reason: 'Angular CLI is not installed'
-        };
-    }
+/** Determine whether the Angular CLI needs to be installed or updated. */
+export function needsAngularCli(currentVersion, targetVersion) {
+  if (!currentVersion) {
+    return { needed: true, reason: 'Angular CLI is not installed' };
+  }
 
-    const currentMajor = parseInt(currentAngularCliVersion.split('.')[0]);
-    const targetMajor = parseInt(targetAngularVersion.split('.')[0]);
+  const currentMajor = semver.major(currentVersion);
+  const targetMajor = semver.major(targetVersion);
 
-    if (currentMajor !== targetMajor) {
-        return {
-            needed: true,
-            reason: `Angular CLI version mismatch (current: ${currentMajor}, target: ${targetMajor})`,
-            suggestion: `Consider using npx @angular/cli@${targetAngularVersion} instead`
-        };
-    }
-
+  if (currentMajor !== targetMajor) {
     return {
-        needed: false,
-        reason: 'Angular CLI version is compatible'
+      needed: true,
+      reason: `Angular CLI version mismatch (current: ${currentMajor}, target: ${targetMajor})`,
+      suggestion: `Consider using npx @angular/cli@${targetVersion} instead`,
     };
+  }
+
+  return { needed: false, reason: 'Angular CLI version is compatible' };
 }
 
-/**
- * Fetch package data from npm registry with caching
- */
-async function fetchPackageData(packageName) {
-    const cacheKey = packageName;
-    const cached = packageCache.get(cacheKey);
-    
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-        return cached.data;
-    }
-    
-    try {
-        const response = await axios.get(`${NPM_REGISTRY_URL}/${encodeURIComponent(packageName)}`, {
-            timeout: 10000
-        });
-        
-        const data = response.data;
-        
-        // Clean up old cache entries if cache is too large
-        if (packageCache.size >= MAX_CACHE_SIZE) {
-            const oldestKey = packageCache.keys().next().value;
-            packageCache.delete(oldestKey);
-        }
-        
-        packageCache.set(cacheKey, { data, timestamp: Date.now() });
-        return data;
-    } catch (error) {
-        console.error(chalk.gray(`Could not fetch package data for ${packageName}: ${error.message}`));
-        return null;
-    }
-}
+// ═══════════════════════════════════════════════════════════════════════
+//  Library ↔ Angular Compatibility  (single-request · in-memory)
+// ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Fetch specific version data from npm registry
- */
-async function fetchPackageVersionData(packageName, version) {
-    try {
-        const response = await axios.get(`${NPM_REGISTRY_URL}/${encodeURIComponent(packageName)}/${version}`, {
-            timeout: 5000
-        });
-        return response.data;
-    } catch (error) {
-        return null;
-    }
-}
-
-/**
- * Get peer dependencies for a specific package version
- */
-export async function getPackagePeerDependencies(packageName, version) {
-    const versionData = await fetchPackageVersionData(packageName, version);
-    return versionData?.peerDependencies || {};
-}
-
-/**
- * Check if a specific library version is compatible with Angular version
- * Improved with better error handling and flexible pattern matching
+ * Check whether a specific library version is compatible with an Angular version.
+ *
+ * ⚡ Reads from the npm-search.js shared cache — **0 extra HTTP requests**
+ *    if the package has been fetched before.
+ *
+ * @returns {{ compatible: boolean, peerDependency?: string, hasPeerDependency: boolean, reason: string }}
  */
 export async function isVersionCompatibleWithAngular(packageName, version, angularVersion) {
-    const peerDeps = await getPackagePeerDependencies(packageName, version);
-    
-    // Check for Angular peer dependencies (check multiple possible keys)
-    const angularDepKeys = ['@angular/core', '@angular/common', '@angular/platform-browser'];
-    let angularDep = null;
-    
-    for (const key of angularDepKeys) {
-        if (peerDeps[key]) {
-            angularDep = peerDeps[key];
-            break;
-        }
-    }
-    
-    if (!angularDep) {
-        // No Angular peer dependency - likely compatible or not Angular-specific
-        return { 
-            compatible: true, 
-            reason: 'No Angular peer dependency found',
-            hasPeerDependency: false
-        };
-    }
-    
-    try {
-        // Check if the Angular version satisfies the peer dependency using semver
-        const isCompatible = semver.satisfies(angularVersion, angularDep);
-        return {
-            compatible: isCompatible,
-            peerDependency: angularDep,
-            hasPeerDependency: true,
-            reason: isCompatible 
-                ? `Angular ${angularVersion} satisfies ${angularDep}`
-                : `Angular ${angularVersion} does not satisfy ${angularDep}`
-        };
-    } catch (error) {
-        // If semver fails, use flexible pattern matching
-        return checkLibraryCompatibility(angularDep, angularVersion);
-    }
-}
+  try {
+    const data = await fetchAbbreviated(packageName);
+    const peerDeps = data.versions?.[version]?.peerDependencies ?? {};
+    const dep = findAngularPeerDep(peerDeps);
 
-/**
- * Dynamically find a compatible version of a library for a given Angular version
- * Improved with better performance and smarter version selection
- */
-export async function findCompatibleLibraryVersion(packageName, angularVersion, preferLatest = true) {
-    const packageData = await fetchPackageData(packageName);
-    
-    if (!packageData) {
-        return { version: 'latest', source: 'fallback', reason: 'Could not fetch package data' };
+    if (!dep) {
+      return {
+        compatible: true,
+        hasPeerDependency: false,
+        reason: 'No Angular peer dependency found',
+      };
     }
-    
-    const angularMajor = parseInt(angularVersion.split('.')[0]);
-    const versions = Object.keys(packageData.versions || {})
-        .filter(v => !v.includes('rc') && !v.includes('beta') && !v.includes('alpha') && !v.includes('next'))
-        .sort((a, b) => semver.rcompare(a, b)); // Newest first
-    
-    // For Angular-scoped packages, match major version (they follow Angular versioning)
-    if (packageName.startsWith('@angular/')) {
-        const matchingVersions = versions.filter(v => {
-            const vMajor = parseInt(v.split('.')[0]);
-            return vMajor === angularMajor;
-        });
-        
-        if (matchingVersions.length > 0) {
-            return { 
-                version: `^${matchingVersions[0]}`, 
-                source: 'dynamic', 
-                reason: `Matched Angular major version ${angularMajor}`,
-                matchType: 'angular-scope'
-            };
-        }
-    }
-    
-    // For other popular Angular ecosystem packages that follow Angular versioning
-    const angularEcosystemPackages = ['@ngrx/', '@ngxs/', '@ng-bootstrap/', '@angular-eslint/'];
-    if (angularEcosystemPackages.some(prefix => packageName.startsWith(prefix))) {
-        const matchingVersions = versions.filter(v => {
-            const vMajor = parseInt(v.split('.')[0]);
-            return vMajor === angularMajor;
-        });
-        
-        if (matchingVersions.length > 0) {
-            return { 
-                version: `^${matchingVersions[0]}`, 
-                source: 'dynamic', 
-                reason: `Matched Angular ecosystem major version ${angularMajor}`,
-                matchType: 'ecosystem'
-            };
-        }
-    }
-    
-    // For other packages, check peer dependencies
-    const compatibleVersions = [];
-    
-    // Intelligent version checking - check more versions for popular packages
-    const maxVersionsToCheck = versions.length > 50 ? 30 : 20;
-    const versionsToCheck = versions.slice(0, maxVersionsToCheck);
-    
-    for (const version of versionsToCheck) {
-        const compatibility = await isVersionCompatibleWithAngular(packageName, version, angularVersion);
-        
-        if (compatibility.compatible) {
-            compatibleVersions.push({
-                version,
-                peerDependency: compatibility.peerDependency,
-                hasPeerDependency: compatibility.hasPeerDependency
-            });
-            
-            // If we found a compatible version and prefer latest, return immediately
-            if (preferLatest) {
-                return {
-                    version: `^${version}`,
-                    source: 'dynamic',
-                    reason: compatibility.reason,
-                    peerDependency: compatibility.peerDependency,
-                    matchType: 'peer-dependency'
-                };
-            }
-        }
-    }
-    
-    if (compatibleVersions.length > 0) {
-        const selected = compatibleVersions[0];
-        return {
-            version: `^${selected.version}`,
-            source: 'dynamic',
-            reason: `Found ${compatibleVersions.length} compatible version(s)`,
-            peerDependency: selected.peerDependency,
-            matchType: 'peer-dependency'
-        };
-    }
-    
-    // No compatible version found, return latest with warning
-    const latest = packageData['dist-tags']?.latest;
+
+    const ok = satisfiesSafe(angularVersion, dep);
     return {
-        version: latest ? `^${latest}` : 'latest',
-        source: 'fallback',
-        reason: 'No version with compatible Angular peer dependency found',
-        warning: true,
-        matchType: 'fallback'
+      compatible: ok,
+      peerDependency: dep,
+      hasPeerDependency: true,
+      reason: ok
+        ? `Angular ${angularVersion} satisfies ${dep}`
+        : `Angular ${angularVersion} does not satisfy ${dep}`,
     };
+  } catch {
+    return {
+      compatible: true,
+      hasPeerDependency: false,
+      reason: 'Could not verify compatibility',
+    };
+  }
 }
 
 /**
- * Get compatible version for a library based on Angular version (async version)
- */
-export async function getCompatibleLibraryVersionAsync(libraryName, angularVersion) {
-    const result = await findCompatibleLibraryVersion(libraryName, angularVersion);
-    return result.version;
-}
-
-/**
- * Get compatible version for a library based on Angular version (sync fallback)
- * @deprecated Use getCompatibleLibraryVersionAsync for accurate results
- * This function now has minimal hardcoded logic and relies on dynamic checks
- */
-export function getCompatibleLibraryVersion(libraryName, angularVersion) {
-    const angularMajor = angularVersion.split('.')[0];
-    
-    // For packages in the @angular scope, match the major version
-    // This is a safe assumption for official Angular packages
-    if (libraryName.startsWith('@angular/')) {
-        return `^${angularMajor}.0.0`;
-    }
-    
-    // For all other packages, use 'latest' and let dynamic resolution handle it
-    // The async version (getCompatibleLibraryVersionAsync) should be preferred
-    return 'latest';
-}
-
-/**
- * Resolve library versions for compatibility with Angular (async version)
- */
-export async function resolveLibraryVersionsAsync(libraries, angularVersion) {
-    const resolved = [];
-    
-    for (const lib of libraries) {
-        const requestedVersion = lib.version || 'latest';
-        
-        if (requestedVersion === 'latest') {
-            const result = await findCompatibleLibraryVersion(lib.name, angularVersion);
-            
-            resolved.push({
-                ...lib,
-                version: result.version,
-                originalVersion: requestedVersion,
-                adjusted: result.source === 'dynamic',
-                source: result.source,
-                reason: result.reason,
-                warning: result.warning || false
-            });
-        } else {
-            // Verify the specific version is compatible
-            const compatibility = await isVersionCompatibleWithAngular(lib.name, requestedVersion.replace(/[\^~]/, ''), angularVersion);
-            
-            resolved.push({
-                ...lib,
-                adjusted: false,
-                compatible: compatibility.compatible,
-                reason: compatibility.reason,
-                warning: !compatibility.compatible
-            });
-        }
-    }
-    
-    return resolved;
-}
-
-/**
- * Resolve library versions for compatibility with Angular (sync fallback)
- */
-export function resolveLibraryVersions(libraries, angularVersion) {
-    return libraries.map(lib => {
-        const requestedVersion = lib.version || 'latest';
-        
-        if (requestedVersion === 'latest') {
-            const compatibleVersion = getCompatibleLibraryVersion(lib.name, angularVersion);
-            return {
-                ...lib,
-                version: compatibleVersion,
-                originalVersion: requestedVersion,
-                adjusted: compatibleVersion !== 'latest'
-            };
-        }
-        
-        return {
-            ...lib,
-            adjusted: false
-        };
-    });
-}
-
-/**
- * Check if a library version is compatible with Angular version using semver
- * Uses dynamic pattern matching with no hardcoded logic
- */
-export function checkLibraryCompatibility(peerDependency, angularVersion) {
-    if (!peerDependency || peerDependency === 'No Angular peer dependency') {
-        return { compatible: true, reason: 'No Angular peer dependency specified' };
-    }
-
-    try {
-        // Use semver to check if Angular version satisfies the peer dependency
-        const isCompatible = semver.satisfies(angularVersion, peerDependency);
-        
-        if (isCompatible) {
-            return { 
-                compatible: true, 
-                reason: `Angular ${angularVersion} satisfies peer dependency '${peerDependency}'` 
-            };
-        } else {
-            return { 
-                compatible: false, 
-                reason: `Angular ${angularVersion} does not satisfy peer dependency '${peerDependency}'` 
-            };
-        }
-    } catch (error) {
-        // Fallback to flexible pattern matching if semver fails (for complex ranges)
-        const angularMajor = angularVersion.split('.')[0];
-        const angularMinor = angularVersion.split('.')[1] || '0';
-        
-        // Generate dynamic patterns based on actual version
-        const patterns = [
-            `^${angularMajor}.`,      // Caret range
-            `~${angularMajor}.`,      // Tilde range
-            `>=${angularMajor}.`,     // Greater than or equal
-            `${angularMajor}.x`,      // X-range
-            `${angularMajor}.${angularMinor}.`, // Specific minor
-            ` ${angularMajor}.`,      // With space
-            `||.*${angularMajor}\.`  // In OR range
-        ];
-
-        // Check if any pattern matches
-        const isCompatible = patterns.some(pattern => {
-            const regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-            return regex.test(peerDependency);
-        });
-
-        if (isCompatible) {
-            return { 
-                compatible: true, 
-                reason: `Peer dependency '${peerDependency}' appears compatible with Angular ${angularMajor}` 
-            };
-        } else {
-            return { 
-                compatible: false, 
-                reason: `Peer dependency '${peerDependency}' may not support Angular ${angularMajor}` 
-            };
-        }
-    }
-}
-
-/**
- * Get all compatible versions of a package for a given Angular version
+ * Find all stable versions of a package that are compatible with a given
+ * Angular version.
+ *
+ * ⚡ **1 HTTP request** (or cached) — evaluates every version in-memory.
+ *    Previous implementation made N+1 HTTP requests.
  */
 export async function getAllCompatibleVersions(packageName, angularVersion, maxResults = 10) {
-    const packageData = await fetchPackageData(packageName);
-    
-    if (!packageData) {
-        return [];
-    }
-    
-    const versions = Object.keys(packageData.versions || {})
-        .filter(v => !v.includes('rc') && !v.includes('beta') && !v.includes('alpha') && !v.includes('next'))
-        .sort((a, b) => semver.rcompare(a, b));
-    
-    const compatibleVersions = [];
-    
+  try {
+    const data = await fetchAbbreviated(packageName);
+    const versions = stableVersionsDesc(data);
+    const results = [];
+
     for (const version of versions) {
-        if (compatibleVersions.length >= maxResults) break;
-        
-        const compatibility = await isVersionCompatibleWithAngular(packageName, version, angularVersion);
-        
-        if (compatibility.compatible) {
-            compatibleVersions.push({
-                version,
-                peerDependency: compatibility.peerDependency,
-                reason: compatibility.reason
-            });
-        }
+      if (results.length >= maxResults) break;
+
+      const peerDeps = data.versions[version]?.peerDependencies ?? {};
+      const dep = findAngularPeerDep(peerDeps);
+
+      // Compatible if no Angular peer dep OR the range is satisfied
+      if (!dep || satisfiesSafe(angularVersion, dep)) {
+        results.push({
+          version,
+          peerDependency: dep ?? 'No Angular peer dependency',
+          reason: dep ? `Satisfies ${dep}` : 'No peer dependency constraint',
+        });
+      }
     }
-    
-    return compatibleVersions;
+
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Dynamically find the best compatible version of a library for a given
+ * Angular version.
+ *
+ * Strategy (in order):
+ *   1. **Ecosystem packages** (`@angular/*`, `@ngrx/*`, …) → match major version
+ *   2. **Peer-dependency check** → newest version whose peer deps are satisfied
+ *   3. **No peer dep** → newest version (framework-agnostic)
+ *   4. **Fallback** → `latest` dist-tag with a warning
+ *
+ * ⚡ Single HTTP request per package (cached + deduplicated via npm-search.js).
+ */
+export async function findCompatibleLibraryVersion(packageName, angularVersion) {
+  let data;
+  try {
+    data = await fetchAbbreviated(packageName);
+  } catch {
+    return {
+      version: 'latest',
+      source: 'fallback',
+      reason: 'Could not fetch package data',
+      warning: true,
+      matchType: 'fallback',
+    };
+  }
+
+  const angularMajor = semver.major(angularVersion);
+  const versions = stableVersionsDesc(data);
+  const latest = data['dist-tags']?.latest;
+
+  // ── 1. Angular ecosystem → match major version ──────────────
+  if (isEcosystemPackage(packageName)) {
+    const match = versions.find(
+      v => parseInt(v.split('.')[0], 10) === angularMajor,
+    );
+    if (match) {
+      return {
+        version: `^${match}`,
+        source: 'dynamic',
+        reason: `Matched Angular major version ${angularMajor}`,
+        matchType: 'ecosystem',
+      };
+    }
+    // No matching major → fall through to peer-dep check
+  }
+
+  // ── 2 & 3. Peer-dependency or no-peer-dep check ─────────────
+  for (const version of versions) {
+    const peerDeps = data.versions[version]?.peerDependencies ?? {};
+    const dep = findAngularPeerDep(peerDeps);
+
+    if (!dep) {
+      return {
+        version: `^${version}`,
+        source: 'dynamic',
+        reason: 'No Angular peer dependency',
+        matchType: 'no-peer',
+      };
+    }
+
+    if (satisfiesSafe(angularVersion, dep)) {
+      return {
+        version: `^${version}`,
+        source: 'dynamic',
+        reason: `Angular ${angularVersion} satisfies ${dep}`,
+        peerDependency: dep,
+        matchType: 'peer-dependency',
+      };
+    }
+  }
+
+  // ── 4. Fallback ─────────────────────────────────────────────
+  return {
+    version: latest ? `^${latest}` : 'latest',
+    source: 'fallback',
+    reason: 'No version with compatible Angular peer dependency found',
+    warning: true,
+    matchType: 'fallback',
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Batch Library Resolution
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Resolve compatible versions for a list of libraries against a target
+ * Angular version.
+ *
+ * ⚡ **Parallel execution** — all libraries resolved concurrently.
+ *    Each resolution is a single cached HTTP request at most.
+ */
+export async function resolveLibraryVersionsAsync(libraries, angularVersion) {
+  return Promise.all(
+    libraries.map(lib => resolveLibrary(lib, angularVersion)),
+  );
+}
+
+/**
+ * Resolve a single library entry.
+ * @private
+ */
+async function resolveLibrary(lib, angularVersion) {
+  const requested = lib.version || 'latest';
+
+  // ── User asked for "latest" → find the best compatible version ──
+  if (requested === 'latest') {
+    const result = await findCompatibleLibraryVersion(lib.name, angularVersion);
+
+    return {
+      ...lib,
+      version: result.version,
+      originalVersion: requested,
+      adjusted: result.source === 'dynamic',
+      source: result.source,
+      reason: result.reason,
+      warning: result.warning || false,
+    };
+  }
+
+  // ── Specific version → verify compatibility ─────────────────
+  const clean = requested.replace(/^[\^~]/, '');
+  const compat = await isVersionCompatibleWithAngular(lib.name, clean, angularVersion);
+
+  return {
+    ...lib,
+    adjusted: false,
+    compatible: compat.compatible,
+    reason: compat.reason,
+    warning: !compat.compatible,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Legacy / Backward-Compatible Exports
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Check compatibility using a raw peer-dependency range string.
+ * Kept for any remaining call sites that pass pre-fetched peer dep strings.
+ */
+export function checkLibraryCompatibility(peerDependency, angularVersion) {
+  if (!peerDependency || peerDependency === 'No Angular peer dependency') {
+    return { compatible: true, reason: 'No Angular peer dependency specified' };
+  }
+
+  const ok = satisfiesSafe(angularVersion, peerDependency);
+  return {
+    compatible: ok,
+    reason: ok
+      ? `Angular ${angularVersion} satisfies peer dependency '${peerDependency}'`
+      : `Angular ${angularVersion} does not satisfy peer dependency '${peerDependency}'`,
+  };
+}
+
+/**
+ * Synchronous fallback for library version resolution.
+ * Only handles `@angular/` scoped packages — everything else gets "latest".
+ *
+ * @deprecated Prefer {@link resolveLibraryVersionsAsync} for accurate results.
+ */
+export function resolveLibraryVersions(libraries, angularVersion) {
+  const major = angularVersion.split('.')[0];
+
+  return libraries.map(lib => {
+    const requested = lib.version || 'latest';
+
+    if (requested !== 'latest') {
+      return { ...lib, adjusted: false };
+    }
+
+    if (lib.name.startsWith('@angular/')) {
+      return {
+        ...lib,
+        version: `^${major}.0.0`,
+        originalVersion: requested,
+        adjusted: true,
+      };
+    }
+
+    return { ...lib, adjusted: false };
+  });
 }
