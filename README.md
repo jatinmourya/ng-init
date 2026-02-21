@@ -74,6 +74,7 @@ ng-init create
 ```
 
 This starts the interactive CLI that guides you through:
+
 1. System environment check
 2. Angular version selection
 3. Node.js compatibility check and resolution
@@ -116,6 +117,7 @@ ng-init profile export <profile-name> <output-file>
 ```
 
 Example:
+
 ```bash
 ng-init profile export my-enterprise-setup ./enterprise-profile.json
 ```
@@ -127,6 +129,7 @@ ng-init profile import <profile-file>
 ```
 
 Example:
+
 ```bash
 ng-init profile import ./enterprise-profile.json
 ```
@@ -279,7 +282,7 @@ flowchart TB
 ### Flow Description
 
 | Step | Phase | Description |
-|------|-------|-------------|
+| - | - | - |
 | 1 | **Start** | User initiates CLI with `ng-init` command |
 | 2 | **System Check** | Displays current Node.js, npm, nvm, and Angular CLI versions |
 | 3 | **Profile** | Option to use a previously saved configuration profile |
@@ -294,7 +297,7 @@ flowchart TB
 
 ## 🏗️ Project Structure
 
-```
+```text
 ng-init/
 ├── src/
 │   ├── index.js               # CLI entry point
@@ -352,9 +355,3 @@ For detailed documentation, visit [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTA
 - 🚀 **Instant project scaffolding** with best practices
 - 💾 **Reusable profiles** for team standardization
 - 🔄 **Dynamic library version resolution** for Angular compatibility
-
----
-
-**Made with ❤️ by the Angular community**
-
-**Last Updated**: February 4, 2026

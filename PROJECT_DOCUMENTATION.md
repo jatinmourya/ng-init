@@ -1,9 +1,11 @@
 # Angular Project Automation CLI
 
 ## Project Overview
+
 A command-line interface (CLI) application designed to automate and streamline the initialization of Angular projects with intelligent version management and prerequisite handling. This tool will be published on npm for easy global installation and use.
 
 ## Target Audience
+
 - Angular developers who frequently create new projects
 - Teams looking to standardize Angular project setup
 - Developers new to Angular who need guidance on prerequisites
@@ -12,7 +14,9 @@ A command-line interface (CLI) application designed to automate and streamline t
 ## Core Features
 
 ### 1. **System Environment Check**
+
 When the CLI starts, it displays:
+
 - Node.js version
 - npm version
 - nvm version (if installed)
@@ -21,6 +25,7 @@ When the CLI starts, it displays:
 **Purpose**: Provides immediate visibility into the development environment before making any changes.
 
 ### 2. **Angular Version Selection**
+
 - Fetches all available Angular versions from npm registry
 - Displays versions in an interactive dropdown/list
 - Shows version metadata (release date, LTS status, latest/stable tags)
@@ -29,6 +34,7 @@ When the CLI starts, it displays:
 **Technical Implementation**: Query npm registry API for `@angular/cli` package versions.
 
 ### 3. **Prerequisite Compatibility Check**
+
 - Automatically fetches Node.js version requirements for selected Angular version
 - Validates current Node.js installation against requirements
 - Displays compatibility status (✓ Compatible / ✗ Incompatible)
@@ -37,6 +43,7 @@ When the CLI starts, it displays:
 **Data Source**: Angular's official compatibility matrix or package.json engines field.
 
 ### 4. **Smart Node Version Management (nvm installed)**
+
 - Detects if nvm is installed on the system
 - If incompatible Node version detected:
   - Lists compatible Node versions available through nvm
@@ -45,22 +52,27 @@ When the CLI starts, it displays:
 - Validates successful version switch
 
 ### 5. **Node.js Installation Assistant (nvm not installed)**
+
 Provides two paths when nvm is not detected:
 
-**Option A: Install nvm (Recommended)**
+#### **Option A: Install nvm (Recommended)**
+
 - Displays benefits of using nvm (multiple Node versions, easy switching)
 - Provides installation instructions:
   - Windows: nvm-windows download link
   - macOS/Linux: curl/wget command
 - Option to open installation guide in browser
 
-**Option B: Direct Node.js Installation**
+#### **Option B: Direct Node.js Installation**
+
 - Uses `winget` on Windows to install Node.js directly
 - Command: `winget install OpenJS.NodeJS.LTS` or specific version
 - Provides alternative installation methods for other OS
 
 ### 6. **Project Location Configuration**
+
 Interactive prompts:
+
 - **Option 1**: Create in current directory
 - **Option 2**: Create in new directory
   - Prompt for project name
@@ -68,6 +80,7 @@ Interactive prompts:
   - Create directory and navigate into it
 
 ### 7. **Project Initialization**
+
 - Execute `ng new <project-name>` with selected Angular version
 - Optionally pass configuration flags to Angular CLI
 
@@ -76,9 +89,11 @@ Interactive prompts:
 ## Suggested Additional Features
 
 ### 🎨 **Pre-configured Project Templates** (DISABLED)
+
 This feature has been disabled in favor of direct project configuration through interactive prompts.
 
 Users now configure projects by answering specific questions:
+
 - Enable routing?
 - Select stylesheet format (css/scss/sass/less)
 - Enable strict mode?
@@ -88,7 +103,9 @@ Users now configure projects by answering specific questions:
 in this codebase; users configure projects directly through the interactive prompts instead.
 
 ### 📦 **Interactive Library Search & Installation**
+
 **Smart npm Package Discovery:**
+
 - User types library name in interactive prompt
 - CLI performs real-time search against npm registry API
 - Validates package existence and authenticity
@@ -104,6 +121,7 @@ in this codebase; users configure projects directly through the interactive prom
 - Validates version compatibility with selected Angular version
 
 **Technical Implementation:**
+
 ```javascript
 // npm registry search API
 GET https://registry.npmjs.org/-/v1/search?text={query}&size=10
@@ -113,7 +131,8 @@ GET https://registry.npmjs.org/{package-name}
 ```
 
 **User Experience Flow:**
-```
+
+```text
 CLI: Would you like to add additional libraries? (Y/n)
 User: Y
 CLI: Type library name (start typing for suggestions):
@@ -134,16 +153,20 @@ CLI: ✓ Added @angular/material@17.0.2
 ```
 
 ### 📦 **Popular Library Bundles** (DISABLED)
+
 The previous design included predefined library bundles but these bundles are disabled in the
 current implementation. Libraries are added interactively or via manual entry.
 
 ### 🔧 **Configuration Presets** (DISABLED)
+
 Automatic configuration presets (ESLint, Prettier, Husky, CI templates, Docker, editor settings)
 are not applied by the CLI. Users can add these manually after project creation.
 
 ### 📋 **Project Structure Generator**
+
 Auto-generate folder structure:
-```
+
+```text
 src/
 ├── app/
 │   ├── core/           (singleton services, guards)
@@ -154,26 +177,31 @@ src/
 ```
 
 ### 🔐 **Environment Configuration**
+
 - Generate `.env` template files
 - Setup environment variables handling
 - Create `.env.example` with required variables
 - Integrate with `dotenv` for Angular
 
 ### 🧪 **Testing Setup Enhancement**
+
 - Choice between Jasmine/Karma (default) or Jest
 - Integration test setup with Cypress or Playwright
 - Test coverage configuration (Istanbul)
 - Mock API setup with MSW (Mock Service Worker)
 
 ### 📚 **Documentation Generation** (DISABLED)
+
 Automatic README/CHANGELOG/Compodoc generation was removed; the CLI does not currently scaffold
 project documentation templates.
 
 ### 🚀 **Git Integration** (NOT AUTOMATIC)
+
 Helper functions for Git initialization exist in `src/utils/file-utils.js`, but the CLI does not
 automatically initialize repositories or create commits during project creation.
 
 ### 🎯 **Best Practices Enforcement**
+
 - Enable Angular strict mode by default
 - Configure path aliases (@app, @shared, @core)
 - Setup module boundaries with ESLint rules
@@ -181,32 +209,39 @@ automatically initialize repositories or create commits during project creation.
 - Configure bundle size budgets
 
 ### 🔄 **Migration Assistant**
+
 - Offer Angular update path for existing projects
 - Detect and suggest migrations (e.g., from tslint to eslint)
 - Provide deprecation warnings for selected Angular version
 
 ### 📊 **Interactive Dashboard**
+
 After project creation:
+
 - Display next steps checklist
 - Show useful commands (serve, build, test)
 - Provide links to documentation
 - Suggest VS Code extensions for Angular development
 
 ### 🌐 **Multi-language Support**
+
 - i18n setup with `@angular/localize`
 - Translation file structure
 - Language switching configuration
 
 ### 🔔 **Update Notifications**
+
 - Check for CLI tool updates on startup
 - Notify about new Angular versions
 - Security advisory alerts for dependencies
 
 ### 💾 **Profile Saving**
+
 Profiles are saved locally to `~/.ng-init/profiles.json`. The CLI supports save/load/export/import
 of profiles, but there is no cloud sync or remote profile storage in the current implementation.
 
 ### 🧰 **Dependency Management**
+
 - Show dependency tree visualization
 - Suggest package updates during setup
 - Offer alternative lighter packages (e.g., date-fns instead of moment)
@@ -217,6 +252,7 @@ of profiles, but there is no cloud sync or remote profile storage in the current
 ## Technical Architecture
 
 ### Technology Stack
+
 - **Runtime**: Node.js (v18+)
 - **Language**: JavaScript (ES Modules)
 - **CLI Framework**: Commander.js
@@ -228,15 +264,17 @@ of profiles, but there is no cloud sync or remote profile storage in the current
 - **Version Comparison**: Semver
 
 ### API Integrations
-- **npm Registry API**: https://registry.npmjs.org/@angular/cli
-- **npm Search API**: https://registry.npmjs.org/-/v1/search (for package discovery)
-- **npm Package Details**: https://registry.npmjs.org/{package-name}
-- **npm Package Downloads**: https://api.npmjs.org/downloads/point/last-week/{package}
+
+- **npm Registry API**: <https://registry.npmjs.org/@angular/cli>
+- **npm Search API**: <https://registry.npmjs.org/-/v1/search> (for package discovery)
+- **npm Package Details**: <https://registry.npmjs.org/{package-name}>
+- **npm Package Downloads**: <https://api.npmjs.org/downloads/point/last-week/{package}>
 - Angular Compatibility Matrix
 - Node.js Release Schedule API
 
 ### File Structure
-```
+
+```text
 src/
 ├── index.js               # CLI entry point
 ├── runner.js              # Main CLI flow
@@ -305,6 +343,7 @@ flowchart TD
 ## Installation & Usage
 
 ### Installation
+
 ```bash
 npm install -g @jatinmourya/ng-init
 # or
@@ -312,6 +351,7 @@ yarn global add @jatinmourya/ng-init
 ```
 
 ### Usage
+
 ```bash
 # Start the CLI
 ng-init
@@ -325,6 +365,7 @@ ng-init --template=enterprise --version=17.0.0
 ## Development Roadmap
 
 ### Phase 1 (MVP) ✅ COMPLETE
+
 - ✅ System version detection
 - ✅ Angular version selection
 - ✅ Compatibility checking
@@ -333,12 +374,14 @@ ng-init --template=enterprise --version=17.0.0
 - ✅ Project initialization
 
 ### Phase 2 ✅ COMPLETE
+
 - ✅ Library bundles
 - ✅ Project templates
 - ✅ Configuration presets
 - ✅ Documentation generation
 
 ### Phase 3 ✅ COMPLETE
+
 - ✅ Git integration
 - ✅ Profile management
 - ✅ Dynamic library version resolution
@@ -350,6 +393,7 @@ ng-init --template=enterprise --version=17.0.0
 - ⏳ Multi-language support (planned)
 
 ### Phase 4 (Planned)
+
 - 📊 Dashboard/Analytics
 - 🔔 Update notifications
 - ☁️ Cloud sync features
@@ -358,6 +402,7 @@ ng-init --template=enterprise --version=17.0.0
 ---
 
 ## Success Metrics
+
 - ✅ Time saved per project initialization: **80% reduction achieved**
 - ✅ User adoption rate: Active development
 - ✅ Error reduction in environment setup: **Zero errors with guided setup**
@@ -366,9 +411,11 @@ ng-init --template=enterprise --version=17.0.0
 ---
 
 ## Contributing
+
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines.
 
 ## License
+
 MIT License - See [LICENSE](./LICENSE) for details.
 
 ---
