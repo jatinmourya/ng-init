@@ -1,5 +1,5 @@
 import Table from 'cli-table3';
-import chalk from 'chalk';
+import colors from './colors.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 //  Constants
@@ -18,7 +18,7 @@ const HEAD_STYLE = { head: ['cyan'] };
  * "log title → build table → log table" sequence.
  */
 function render(title, table) {
-  if (title) console.log(chalk.bold.cyan(`\n${title}\n`));
+  if (title) console.log(colors.boldInfo(`\n${title}\n`));
   console.log(table.toString() + '\n');
 }
 
@@ -48,7 +48,7 @@ function toStr(value) {
  */
 export function printKeyValue(title, pairs = []) {
   if (pairs.length === 0) {
-    console.log(chalk.yellow(`No ${title || 'items'} to display.`));
+    console.log(colors.warning(`No ${title || 'items'} to display.`));
     return;
   }
 
@@ -78,7 +78,7 @@ export function printKeyValue(title, pairs = []) {
  */
 export function printObjectList(title, data = [], cols = []) {
   if (!Array.isArray(data) || data.length === 0) {
-    console.log(chalk.yellow(`No ${title || 'items'} to display.`));
+    console.log(colors.warning(`No ${title || 'items'} to display.`));
     return;
   }
 
@@ -106,7 +106,7 @@ export function printObjectList(title, data = [], cols = []) {
  */
 export function printSimpleTable(title, data = []) {
   if (!Array.isArray(data) || data.length === 0) {
-    console.log(chalk.yellow(`No ${title || 'items'} to display.`));
+    console.log(colors.warning(`No ${title || 'items'} to display.`));
     return;
   }
 

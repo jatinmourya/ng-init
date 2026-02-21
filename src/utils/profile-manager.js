@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { homedir } from 'os';
-import chalk from 'chalk';
+import colors from './colors.js';
 import { printKeyValue, printObjectList } from './table-helper.js';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -25,7 +25,7 @@ let _dirReady = null;
 
 function ensureDir() {
   _dirReady ??= fs.mkdir(PROFILES_DIR, { recursive: true }).catch(err => {
-    console.error(chalk.red('Failed to create profiles directory:'), err.message);
+    console.error(colors.error('Failed to create profiles directory:'), err.message);
     throw err;
   });
   return _dirReady;
@@ -70,7 +70,7 @@ async function writeProfiles(profiles) {
     _cache = profiles;
     return true;
   } catch (err) {
-    console.error(chalk.red('Failed to save profiles:'), err.message);
+    console.error(colors.error('Failed to save profiles:'), err.message);
     return false;
   }
 }
@@ -120,7 +120,7 @@ export async function saveProfile(name, config) {
   };
 
   const ok = await writeProfiles(profiles);
-  if (ok) console.log(chalk.green(`✓ Profile "${name}" saved successfully`));
+  if (ok) console.log(colors.success(`✓ Profile "${name}" saved successfully`));
   return ok;
 }
 
@@ -132,14 +132,14 @@ export async function deleteProfile(name) {
   const profiles = await readProfiles();
 
   if (!profiles[name]) {
-    console.log(chalk.yellow(`Profile "${name}" not found`));
+    console.log(colors.warning(`Profile "${name}" not found`));
     return false;
   }
 
   delete profiles[name];
 
   const ok = await writeProfiles(profiles);
-  if (ok) console.log(chalk.green(`✓ Profile "${name}" deleted successfully`));
+  if (ok) console.log(colors.success(`✓ Profile "${name}" deleted successfully`));
   return ok;
 }
 
@@ -172,19 +172,19 @@ export function displayProfileInfo(name, profile) {
   const rows = [];
 
   if (profile.angularVersion) {
-    rows.push(['Angular Version', chalk.green(profile.angularVersion)]);
+    rows.push(['Angular Version', colors.success(profile.angularVersion)]);
   }
   if (profile.template) {
-    rows.push(['Template', chalk.gray(`${profile.template} (deprecated)`)]);
+    rows.push(['Template', colors.muted(`${profile.template} (deprecated)`)]);
   }
 
-  rows.push(['Libraries', chalk.cyan(String(profile.libraries?.length ?? 0))]);
+  rows.push(['Libraries', colors.info(String(profile.libraries?.length ?? 0))]);
 
   if (profile.createdAt) {
-    rows.push(['Created', chalk.gray(new Date(profile.createdAt).toLocaleString())]);
+    rows.push(['Created', colors.muted(new Date(profile.createdAt).toLocaleString())]);
   }
   if (profile.updatedAt) {
-    rows.push(['Updated', chalk.gray(new Date(profile.updatedAt).toLocaleString())]);
+    rows.push(['Updated', colors.muted(new Date(profile.updatedAt).toLocaleString())]);
   }
 
   printKeyValue(`📋 Profile: ${name}`, rows);
@@ -205,7 +205,7 @@ export function displayProfileInfo(name, profile) {
     );
 
     if (libs.length > MAX_DISPLAY_LIBS) {
-      console.log(chalk.gray(`  … and ${libs.length - MAX_DISPLAY_LIBS} more`));
+      console.log(colors.muted(`  … and ${libs.length - MAX_DISPLAY_LIBS} more`));
     }
   }
 
@@ -234,7 +234,7 @@ export async function exportProfile(name, outputPath) {
   const profile = await loadProfile(name);
 
   if (!profile) {
-    console.log(chalk.red(`Profile "${name}" not found`));
+    console.log(colors.error(`Profile "${name}" not found`));
     return false;
   }
 
@@ -247,10 +247,10 @@ export async function exportProfile(name, outputPath) {
     };
 
     await fs.writeFile(outputPath, JSON.stringify(data, null, 2), 'utf-8');
-    console.log(chalk.green(`✓ Profile exported to ${outputPath}`));
+    console.log(colors.success(`✓ Profile exported to ${outputPath}`));
     return true;
   } catch (err) {
-    console.error(chalk.red('Failed to export profile:'), err.message);
+    console.error(colors.error('Failed to export profile:'), err.message);
     return false;
   }
 }
@@ -271,12 +271,12 @@ export async function importProfile(filePath) {
     const content = await fs.readFile(filePath, 'utf-8');
     importData = JSON.parse(content);
   } catch (err) {
-    console.error(chalk.red('Failed to read profile file:'), err.message);
+    console.error(colors.error('Failed to read profile file:'), err.message);
     return false;
   }
 
   if (!importData.name || !importData.profile) {
-    console.log(chalk.red('Invalid profile file format'));
+    console.log(colors.error('Invalid profile file format'));
     return false;
   }
 
@@ -290,7 +290,7 @@ export async function importProfile(filePath) {
   };
 
   const ok = await writeProfiles(profiles);
-  if (ok) console.log(chalk.green(`✓ Profile "${importData.name}" imported successfully`));
+  if (ok) console.log(colors.success(`✓ Profile "${importData.name}" imported successfully`));
   return ok;
 }
 

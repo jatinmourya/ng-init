@@ -262,14 +262,6 @@ flowchart TD
     Z --> AA["37. Setup Husky"]
     AA --> AB["39. Create Initial Commit"]
     AB --> AC["41. Display Success & Next Steps"]
-    
-    style A fill:#e1f5fe
-    style AC fill:#c8e6c9
-    style C fill:#f3e5f5
-    style G fill:#ffebee
-    style L fill:#fff3e0
-    style Q fill:#f3e5f5
-    style S fill:#e8eaf6
 ```
 
 ## 🎨 Key Highlights

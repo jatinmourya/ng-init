@@ -1,6 +1,6 @@
 import { execa } from 'execa';
 import ora from 'ora';
-import chalk from 'chalk';
+import colors from './colors.js';
 import { platform } from 'os';
 import { printKeyValue, printObjectList } from './table-helper.js';
 
@@ -46,18 +46,18 @@ async function npmExecWithRetry({ args, cwd, spinner, successMsg, failMsg, manua
   try {
     await execa('npm', [...args, '--legacy-peer-deps'], { cwd });
     spinner.succeed(`${successMsg} (with --legacy-peer-deps)`);
-    console.log(chalk.yellow(
+    console.log(colors.warning(
       '⚠️  Note: Installed with --legacy-peer-deps due to peer dependency conflicts',
     ));
     return true;
   } catch (error) {
     spinner.fail(failMsg);
-    console.error(chalk.red(error.message));
+    console.error(colors.error(error.message));
 
     if (manualHint.length > 0) {
-      console.log(chalk.yellow('\n💡 Tip: You can try installing manually with:'));
+      console.log(colors.warning('\n💡 Tip: You can try installing manually with:'));
       for (const line of manualHint) {
-        console.log(chalk.cyan(`   ${line}`));
+        console.log(colors.info(`   ${line}`));
       }
     }
     return false;
@@ -98,7 +98,7 @@ async function execInteractive(cmd, args, { spinner, successMsg, failMsg }) {
     return true;
   } catch (error) {
     ora().fail(failMsg);
-    console.error(chalk.red(error.message));
+    console.error(colors.error(error.message));
     return false;
   }
 }
@@ -180,10 +180,10 @@ export function displayNvmInstallGuide() {
   const data = getNvmInstallInstructions();
 
   printKeyValue('📚 NVM Installation Guide', [
-    ['OS', chalk.cyan(data.os)],
-    ['Download/Repo', chalk.blue(data.download ?? data.repo ?? '-')],
-    ['Install', data.install ? chalk.green(data.install) : '-'],
-    ['Alternative', data.alternative ? chalk.green(data.alternative) : '-'],
+    ['OS', colors.info(data.os)],
+    ['Download/Repo', colors.link(data.download ?? data.repo ?? '-')],
+    ['Install', data.install ? colors.success(data.install) : '-'],
+    ['Alternative', data.alternative ? colors.success(data.alternative) : '-'],
   ]);
 
   const toRows = (arr) => arr.map((s, i) => ({ Step: `${i + 1}`, Instruction: s }));
@@ -276,7 +276,7 @@ export async function initNpmProject(projectPath) {
     await execa('npm', ['init', '-y'], { cwd: projectPath, stdio: 'inherit' });
     return true;
   } catch (error) {
-    console.error(chalk.red('Failed to initialize npm project:', error.message));
+    console.error(colors.error('Failed to initialize npm project:', error.message));
     return false;
   }
 }

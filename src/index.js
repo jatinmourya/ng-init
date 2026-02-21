@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import chalk from 'chalk';
+import colors from './utils/colors.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -28,8 +28,8 @@ function action(fn) {
   return async (...args) => {
     try {
       await fn(...args);
-    } catch (err) {
-      console.error(chalk.red('Error:'), err.message);
+      } catch (err) {
+      console.error(colors.error('Error:'), err.message);
       process.exitCode = 1;
     }
   };
@@ -73,7 +73,7 @@ profile
     const names = await listProfiles();
 
     if (names.length === 0) {
-      console.log(chalk.yellow('No saved profiles found.'));
+      console.log(colors.warning('No saved profiles found.'));
       return;
     }
 
@@ -100,7 +100,7 @@ profile
 
     const p = await loadProfile(name);
     if (!p) {
-      console.log(chalk.red(`Profile "${name}" not found.`));
+      console.log(colors.error(`Profile "${name}" not found.`));
       return;
     }
 
@@ -147,7 +147,7 @@ program
   .command('examples')
   .description('Show usage examples')
   .action(() => {
-    const divider = chalk.gray('━'.repeat(50));
+    const divider = colors.muted('━'.repeat(50));
     const examples = [
       ['Create new project (interactive)', 'ng-init', 'or ng-init create'],
       ['Check system versions', 'ng-init check'],
@@ -158,12 +158,12 @@ program
       ['Import a profile', 'ng-init profile import ./profile.json'],
     ];
 
-    console.log(chalk.bold.cyan('\n📚 Usage Examples:\n'));
+    console.log(colors.boldInfo('\n📚 Usage Examples:\n'));
     console.log(divider);
 
     for (const [desc, cmd, alt] of examples) {
-      console.log(chalk.white(`${desc}:`));
-      console.log(chalk.green(`  $ ${cmd}`) + (alt ? chalk.gray(` ${alt}`) : '') + '\n');
+      console.log(colors.white(`${desc}:`));
+      console.log(colors.success(`  $ ${cmd}`) + (alt ? colors.muted(` ${alt}`) : '') + '\n');
     }
 
     console.log(divider + '\n');

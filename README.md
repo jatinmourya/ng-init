@@ -274,17 +274,6 @@ flowchart TB
         PPPP --> QQQQ["ng serve"]
         QQQQ --> RRRR["Open localhost:4200"]
     end
-
-    style START fill:#e1f5fe
-    style PROFILE fill:#f3e5f5
-    style ANGULAR fill:#fff3e0
-    style NODE fill:#ffebee
-    style PROJECT fill:#e8f5e9
-    style LIBRARY fill:#e0f2f1
-    style SAVE fill:#f3e5f5
-    style CONFIRM fill:#e8eaf6
-    style CREATE fill:#e3f2fd
-    style END fill:#c8e6c9
 ```
 
 ### Flow Description

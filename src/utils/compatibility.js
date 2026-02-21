@@ -1,5 +1,5 @@
 import semver from 'semver';
-import chalk from 'chalk';
+import colors from './colors.js';
 import { printKeyValue } from './table-helper.js';
 import { fetchAbbreviated } from './npm-search.js';
 
@@ -108,11 +108,11 @@ export function checkNodeCompatibility(currentNodeVersion, requiredNodeVersion) 
  */
 export function displayCompatibilityStatus(compatibility) {
   printKeyValue('📋 Compatibility Check', [
-    ['Current Node.js', chalk.cyan(`v${compatibility.current}`)],
-    ['Required Node.js', chalk.cyan(compatibility.required)],
+    ['Current Node.js', colors.info(`v${compatibility.current}`)],
+    ['Required Node.js', colors.info(compatibility.required)],
     ['Status', compatibility.compatible
-      ? chalk.green('✓ Compatible')
-      : chalk.red('✗ Incompatible')],
+      ? colors.success('✓ Compatible')
+      : colors.error('✗ Incompatible')],
   ]);
   return compatibility.compatible;
 }
@@ -142,7 +142,7 @@ export function getRecommendedNodeVersion(requiredRange) {
     if (min) return min.version;
   } catch { /* fall through */ }
 
-  console.log(chalk.yellow(
+  console.log(colors.warning(
     '⚠️  Could not parse Node version range. Please install the latest LTS version.'
   ));
   return null;

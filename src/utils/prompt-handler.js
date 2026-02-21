@@ -1,5 +1,5 @@
 import { search, select, input, confirm } from '@inquirer/prompts';
-import chalk from 'chalk';
+import colors from './colors.js';
 import {
   searchNpmPackages,
   getEnhancedPackageInfo,
@@ -33,7 +33,7 @@ export async function selectVersionInteractively(label, versionData) {
   const { versions, latest = null, lts = null } = versionData;
 
   if (versions.length === 0) {
-    console.log(chalk.yellow(`No stable versions found for ${label}.`));
+    console.log(colors.warning(`No stable versions found for ${label}.`));
     return null;
   }
 
@@ -87,7 +87,7 @@ class LibraryTracker {
 
   display() {
     if (this.#libs.size === 0) {
-      console.log(chalk.gray('  No libraries selected yet.\n'));
+      console.log(colors.muted('  No libraries selected yet.\n'));
       return;
     }
 
@@ -128,27 +128,27 @@ function formatPackageChoice(pkg) {
  * @returns {{ version: string, skip: boolean }}
  */
 async function resolveCompatibleVersion(packageName, version, angularVersion) {
-  console.log(chalk.cyan(`\n🔍 Checking compatibility with Angular ${angularVersion}…\n`));
+  console.log(colors.info(`\n🔍 Checking compatibility with Angular ${angularVersion}…\n`));
 
   const compat = await isVersionCompatibleWithAngular(packageName, version, angularVersion);
 
   if (compat.compatible) {
-    console.log(chalk.green(`✓ ${packageName}@${version} is compatible with Angular ${angularVersion}`));
+    console.log(colors.success(`✓ ${packageName}@${version} is compatible with Angular ${angularVersion}`));
     if (compat.peerDependency) {
-      console.log(chalk.gray(`  Peer dependency: ${compat.peerDependency}\n`));
+      console.log(colors.muted(`  Peer dependency: ${compat.peerDependency}\n`));
     }
     return { version, skip: false };
   }
 
   // ── Incompatible ────────────────────────────────────────────
-  console.log(chalk.red(`✗ ${packageName}@${version} may not be compatible with Angular ${angularVersion}`));
-  console.log(chalk.gray(`  ${compat.reason}\n`));
+  console.log(colors.error(`✗ ${packageName}@${version} may not be compatible with Angular ${angularVersion}`));
+  console.log(colors.muted(`  ${compat.reason}\n`));
 
   if (!await confirm({ message: 'Would you like to see compatible versions?', default: true })) {
     return { version, skip: false };
   }
 
-  console.log(chalk.cyan('\n🔍 Searching for compatible versions…\n'));
+  console.log(colors.info('\n🔍 Searching for compatible versions…\n'));
   const alternatives = await getAllCompatibleVersions(packageName, angularVersion, 10);
 
   if (alternatives.length > 0) {
@@ -166,7 +166,7 @@ async function resolveCompatibleVersion(packageName, version, angularVersion) {
     return { version: picked, skip: false };
   }
 
-  console.log(chalk.yellow('No compatible versions found automatically.'));
+  console.log(colors.warning('No compatible versions found automatically.'));
   const keep = await confirm({ message: 'Continue with the selected version anyway?', default: false });
   return keep ? { version, skip: false } : { version, skip: true };
 }
@@ -200,7 +200,7 @@ async function askNextAction(tracker) {
   });
 
   tracker.remove(toRemove);
-  console.log(chalk.yellow(`\n✓ Removed ${toRemove}\n`));
+  console.log(colors.warning(`\n✓ Removed ${toRemove}\n`));
   return 'add'; // stay in the loop
 }
 
@@ -211,11 +211,11 @@ async function askNextAction(tracker) {
 export async function interactiveLibrarySearch(angularVersion = null) {
   const tracker = new LibraryTracker();
 
-  console.log(chalk.bold.cyan('\n📦 Interactive Library Search\n'));
+  console.log(colors.boldInfo('\n📦 Interactive Library Search\n'));
   if (angularVersion) {
-    console.log(chalk.gray(`Angular version: ${angularVersion} (compatibility will be checked)\n`));
+    console.log(colors.muted(`Angular version: ${angularVersion} (compatibility will be checked)\n`));
   }
-  console.log(chalk.gray('Type to search npm packages. Press Enter to select.\n'));
+  console.log(colors.muted('Type to search npm packages. Press Enter to select.\n'));
 
   let action = 'add';
 
@@ -234,9 +234,9 @@ export async function interactiveLibrarySearch(angularVersion = null) {
 
           const available = results.filter(pkg => !tracker.has(pkg.name));
 
-          if (available.length === 0 && results.length > 0) {
+            if (available.length === 0 && results.length > 0) {
             return [{
-              name: chalk.yellow('All matching libraries have already been selected'),
+              name: colors.warning('All matching libraries have already been selected'),
               value: null,
               disabled: true,
             }];
@@ -263,15 +263,15 @@ export async function interactiveLibrarySearch(angularVersion = null) {
       ]);
 
       if (!info) {
-        console.log(chalk.yellow(`Could not fetch info for ${packageName}. Skipping.\n`));
+        console.log(colors.warning(`Could not fetch info for ${packageName}. Skipping.\n`));
         continue;
       }
 
       printKeyValue('\nSelected Package', [
-        ['Name', chalk.green(info.name)],
-        ['Description', chalk.gray(info.description)],
-        ['Latest version', chalk.cyan(info.latestVersion)],
-        ['Weekly downloads', chalk.gray(formatDownloads(info.weeklyDownloads))],
+        ['Name', colors.success(info.name)],
+        ['Description', colors.muted(info.description)],
+        ['Latest version', colors.info(info.latestVersion)],
+        ['Weekly downloads', colors.muted(formatDownloads(info.weeklyDownloads))],
       ]);
 
       // ── Version selection ───────────────────────────────
@@ -288,8 +288,8 @@ export async function interactiveLibrarySearch(angularVersion = null) {
       let version = info.latestVersion;
 
       if (versionMethod === 'specific') {
-        if (versionData.versions.length === 0) {
-          console.log(chalk.yellow('Could not fetch versions. Using latest.'));
+          if (versionData.versions.length === 0) {
+          console.log(colors.warning('Could not fetch versions. Using latest.'));
         } else {
           const picked = await selectVersionInteractively(info.name, versionData);
           if (picked) version = picked;
@@ -306,7 +306,7 @@ export async function interactiveLibrarySearch(angularVersion = null) {
       if (angularVersion && version !== 'latest') {
         const result = await resolveCompatibleVersion(info.name, version, angularVersion);
         if (result.skip) {
-          console.log(chalk.yellow('Skipping this library.\n'));
+          console.log(colors.warning('Skipping this library.\n'));
           action = await askNextAction(tracker);
           continue;
         }
@@ -315,12 +315,12 @@ export async function interactiveLibrarySearch(angularVersion = null) {
 
       // ── Commit selection ────────────────────────────────
       tracker.add({ name: info.name, version, description: info.description });
-      console.log(chalk.green(`✓ Added ${info.name}@${version} to installation queue\n`));
+      console.log(colors.success(`✓ Added ${info.name}@${version} to installation queue\n`));
 
       action = await askNextAction(tracker);
     } catch (error) {
       if (error.name === 'ExitPromptError') break;
-      console.error(chalk.red('Error during library search:'), error.message);
+      console.error(colors.error('Error during library search:'), error.message);
       action = 'finish';
     }
   }
@@ -335,9 +335,9 @@ export async function interactiveLibrarySearch(angularVersion = null) {
 export async function simpleLibraryInput(angularVersion = null) {
   const tracker = new LibraryTracker();
 
-  console.log(chalk.bold.cyan('\n📦 Add Libraries\n'));
+  console.log(colors.boldInfo('\n📦 Add Libraries\n'));
   if (angularVersion) {
-    console.log(chalk.gray(`Angular version: ${angularVersion} (compatibility will be checked)\n`));
+    console.log(colors.muted(`Angular version: ${angularVersion} (compatibility will be checked)\n`));
   }
 
   let action = 'add';
@@ -367,19 +367,19 @@ export async function simpleLibraryInput(angularVersion = null) {
       const compat = await isVersionCompatibleWithAngular(library, version, angularVersion);
 
       if (compat.compatible) {
-        console.log(chalk.green(`✓ ${library}@${version} is compatible with Angular ${angularVersion}`));
+        console.log(colors.success(`✓ ${library}@${version} is compatible with Angular ${angularVersion}`));
         if (compat.peerDependency) {
-          console.log(chalk.gray(`  Peer dependency: ${compat.peerDependency}\n`));
+          console.log(colors.muted(`  Peer dependency: ${compat.peerDependency}\n`));
         }
       } else {
-        console.log(chalk.red(`✗ ${library}@${version} may not be compatible with Angular ${angularVersion}`));
-        console.log(chalk.gray(`  ${compat.reason}\n`));
-        console.log(chalk.yellow('⚠️  This may cause installation issues.\n'));
+        console.log(colors.error(`✗ ${library}@${version} may not be compatible with Angular ${angularVersion}`));
+        console.log(colors.muted(`  ${compat.reason}\n`));
+        console.log(colors.warning('⚠️  This may cause installation issues.\n'));
       }
     }
 
     tracker.add({ name: library, version });
-    console.log(chalk.green(`✓ Added ${library}@${version}\n`));
+    console.log(colors.success(`✓ Added ${library}@${version}\n`));
 
     action = await askNextAction(tracker);
   }

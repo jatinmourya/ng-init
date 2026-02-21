@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import chalk from 'chalk';
+import colors from './colors.js';
 import { execa } from 'execa';
 import ora from 'ora';
 
@@ -48,10 +48,10 @@ async function writeFile(fullPath, content) {
 async function writeProjectFile(projectPath, fileName, content) {
   try {
     await writeFile(path.join(projectPath, fileName), content);
-    console.log(chalk.green(`✓ Created ${fileName}`));
+    console.log(colors.success(`✓ Created ${fileName}`));
     return true;
   } catch (err) {
-    console.error(chalk.red(`Failed to create ${fileName}:`), err.message);
+    console.error(colors.error(`Failed to create ${fileName}:`), err.message);
     return false;
   }
 }
@@ -68,7 +68,7 @@ async function withSpinner(label, fn) {
     return true;
   } catch (err) {
     spinner.fail();
-    console.error(chalk.red(err.message));
+    console.error(colors.error(err.message));
     return false;
   }
 }
@@ -143,10 +143,10 @@ export async function createProjectFiles(projectPath, files) {
     await Promise.all(
       entries.map(([rel, content]) => writeFile(path.join(projectPath, rel), content)),
     );
-    console.log(chalk.green(`✓ Created ${entries.length} file(s)`));
+    console.log(colors.success(`✓ Created ${entries.length} file(s)`));
     return true;
   } catch (err) {
-    console.error(chalk.red('Failed to create project files:'), err.message);
+    console.error(colors.error('Failed to create project files:'), err.message);
     return false;
   }
 }
@@ -176,7 +176,7 @@ export async function ensureDirectory(dirPath) {
     await fs.mkdir(dirPath, { recursive: true });
     return true;
   } catch (err) {
-    console.error(chalk.red('Failed to create directory:'), err.message);
+    console.error(colors.error('Failed to create directory:'), err.message);
     return false;
   }
 }
@@ -225,7 +225,7 @@ export async function writePackageJson(projectPath, content) {
     );
     return true;
   } catch (err) {
-    console.error(chalk.red('Failed to write package.json:'), err.message);
+    console.error(colors.error('Failed to write package.json:'), err.message);
     return false;
   }
 }
@@ -240,13 +240,13 @@ export async function updatePackageJsonScripts(projectPath, scripts) {
   const pkg = await readPackageJson(projectPath);
 
   if (!pkg) {
-    console.error(chalk.red('Failed to read package.json'));
+    console.error(colors.error('Failed to read package.json'));
     return false;
   }
 
   pkg.scripts = { ...pkg.scripts, ...scripts };
 
   const ok = await writePackageJson(projectPath, pkg);
-  if (ok) console.log(chalk.green('✓ Updated package.json scripts'));
+  if (ok) console.log(colors.success('✓ Updated package.json scripts'));
   return ok;
 }

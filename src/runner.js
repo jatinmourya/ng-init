@@ -1,5 +1,5 @@
 import { select, input, confirm } from '@inquirer/prompts';
-import chalk from 'chalk';
+import colors from './utils/colors.js';
 import path from 'path';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -57,22 +57,22 @@ export async function runCli() {
 
     // ── Step 3: Angular version ─────────────────────────────
     if (!config.angularVersion) {
-      console.log(chalk.bold.cyan('\n📦 Fetching Angular versions…\n'));
+      console.log(colors.boldInfo('\n📦 Fetching Angular versions…\n'));
 
       const angularVersions = await angularVersionsPromise;   // ← already in-flight
 
       if (angularVersions.versions.length === 0) {
-        console.log(chalk.red('Failed to fetch Angular versions. Check your internet connection.'));
+        console.log(colors.error('Failed to fetch Angular versions. Check your internet connection.'));
         process.exit(1);
       }
 
       const selected = await selectVersionInteractively('Angular', angularVersions);
-      if (!selected) { console.log(chalk.red('No version selected.')); process.exit(1); }
+      if (!selected) { console.log(colors.error('No version selected.')); process.exit(1); }
 
       config.angularVersion = selected;
     }
 
-    console.log(chalk.green(`\n✓ Selected Angular version: ${config.angularVersion}\n`));
+    console.log(colors.success(`\n✓ Selected Angular version: ${config.angularVersion}\n`));
 
     // ── Step 4: Node.js compatibility (parallel fetch) ──────
     const [nodeRequirement, currentNodeVersion] = await Promise.all([
@@ -144,23 +144,23 @@ export async function runCli() {
 
     // ── Step 11: Summary & confirm ──────────────────────────
     printKeyValue('📋 Project Configuration Summary', [
-      ['Project Name', chalk.green(config.projectName)],
-      ['Location', chalk.cyan(projectPath)],
-      ['Angular Version', chalk.green(config.angularVersion)],
-      ['Style', chalk.cyan(config.options.style)],
-      ['Routing', chalk.cyan(config.options.routing ? 'Yes' : 'No')],
-      ['Strict Mode', chalk.cyan(config.options.strict ? 'Yes' : 'No')],
-      ['Standalone', chalk.cyan(config.options.standalone ? 'Yes' : 'No')],
-      ['Libraries', chalk.cyan(String(config.libraries.length))],
+      ['Project Name', colors.success(config.projectName)],
+      ['Location', colors.info(projectPath)],
+      ['Angular Version', colors.success(config.angularVersion)],
+      ['Style', colors.info(config.options.style)],
+      ['Routing', colors.info(config.options.routing ? 'Yes' : 'No')],
+      ['Strict Mode', colors.info(config.options.strict ? 'Yes' : 'No')],
+      ['Standalone', colors.info(config.options.standalone ? 'Yes' : 'No')],
+      ['Libraries', colors.info(String(config.libraries.length))],
     ]);
 
     if (!await confirm({ message: 'Create project with this configuration?', default: true })) {
-      console.log(chalk.yellow('Project creation cancelled.\n'));
+      console.log(colors.warning('Project creation cancelled.\n'));
       process.exit(0);
     }
 
     // ── Step 12: Create project + resolve libraries (parallel) ──
-    console.log(chalk.bold.cyan('\n🚀 Creating Angular project…\n'));
+    console.log(colors.boldInfo('\n🚀 Creating Angular project…\n'));
 
     const [created, resolvedLibraries] = await Promise.all([
       createAngularProject(
@@ -174,7 +174,7 @@ export async function runCli() {
     ]);
 
     if (!created) {
-      console.log(chalk.red('Failed to create Angular project.'));
+      console.log(colors.error('Failed to create Angular project.'));
       process.exit(1);
     }
 
@@ -184,7 +184,7 @@ export async function runCli() {
     }
 
     // ── Step 14: npm install ────────────────────────────────
-    console.log(chalk.bold.cyan('\n📥 Installing dependencies…\n'));
+    console.log(colors.boldInfo('\n📥 Installing dependencies…\n'));
     await runNpmInstall(projectPath);
 
     // ── Done ────────────────────────────────────────────────
@@ -192,10 +192,10 @@ export async function runCli() {
 
   } catch (err) {
     if (err.name === 'ExitPromptError') {
-      console.log(chalk.yellow('\nExited.\n'));
+      console.log(colors.warning('\nExited.\n'));
       process.exit(0);
     }
-    console.error(chalk.red('\n❌ Error:'), err.message);
+    console.error(colors.error('\n❌ Error:'), err.message);
     process.exit(1);
   }
 }
@@ -210,7 +210,7 @@ function displayBanner() {
   const pad = width - title.length;
   const line = '═'.repeat(width);
 
-  console.log(chalk.cyan.bold(`
+  console.log(colors.boldInfo(`
 ╔${line}╗
 ║${' '.repeat(Math.floor(pad / 2))}${title}${' '.repeat(Math.ceil(pad / 2))}║
 ╚${line}╝
@@ -221,7 +221,7 @@ async function handleProfileSelection() {
   const profiles = await listProfiles();
 
   if (profiles.length === 0) {
-    console.log(chalk.yellow('No saved profiles found. Continuing with manual setup…\n'));
+    console.log(colors.warning('No saved profiles found. Continuing with manual setup…\n'));
     return {};
   }
 
@@ -253,13 +253,13 @@ async function promptProjectOptions() {
 // ── Node Incompatibility ────────────────────────────────────────────
 
 async function handleNodeIncompatibility(nodeRequirement) {
-  console.log(chalk.yellow('⚠️  Node.js version incompatibility detected!\n'));
+  console.log(colors.warning('⚠️  Node.js version incompatibility detected!\n'));
 
   if (await isNvmInstalled()) {
     return handleNvmSwitch(nodeRequirement);
   }
 
-  console.log(chalk.yellow('⚠️  nvm is not installed on your system\n'));
+  console.log(colors.warning('⚠️  nvm is not installed on your system\n'));
 
   const method = await select({
     message: 'How would you like to proceed?',
@@ -272,66 +272,66 @@ async function handleNodeIncompatibility(nodeRequirement) {
 
   if (method === 'nvm') {
     displayNvmInstallGuide();
-    console.log(chalk.yellow('\nPlease install nvm and run this CLI again.\n'));
+    console.log(colors.warning('\nPlease install nvm and run this CLI again.\n'));
     process.exit(0);
   }
 
   if (method === 'direct') {
-    if (process.platform !== 'win32') {
-      console.log(chalk.red('Direct installation is only supported on Windows.'));
+      if (process.platform !== 'win32') {
+      console.log(colors.error('Direct installation is only supported on Windows.'));
       process.exit(1);
     }
     if (!await installNodeWithWinget('LTS')) {
-      console.log(chalk.red('Failed to install Node.js. Please install manually.'));
+      console.log(colors.error('Failed to install Node.js. Please install manually.'));
       process.exit(1);
     }
-    console.log(chalk.yellow('\nPlease restart your terminal and run this CLI again.\n'));
+    console.log(colors.warning('\nPlease restart your terminal and run this CLI again.\n'));
     process.exit(0);
   }
 
-  console.log(chalk.yellow('Exiting. Please install a compatible Node.js version manually.\n'));
+  console.log(colors.warning('Exiting. Please install a compatible Node.js version manually.\n'));
   process.exit(0);
 }
 
 async function handleNvmSwitch(nodeRequirement) {
-  console.log(chalk.cyan('✓ nvm detected on your system\n'));
+  console.log(colors.info('✓ nvm detected on your system\n'));
 
   const installed = await getInstalledNodeVersions();
   const compatible = findCompatibleVersions(installed, nodeRequirement);
 
   if (compatible.length > 0) {
-    console.log(chalk.green(`Found ${compatible.length} compatible Node version(s) installed:\n`));
+    console.log(colors.success(`Found ${compatible.length} compatible Node version(s) installed:\n`));
 
     const version = await select({
       message: 'Select Node version to switch to:',
       choices: compatible.map(v => ({ name: `v${v}`, value: v })),
     });
 
-    console.log(chalk.cyan(`\nSwitching to Node.js v${version}…\n`));
+    console.log(colors.info(`\nSwitching to Node.js v${version}…\n`));
 
     if (!await switchNodeVersion(version)) {
-      console.log(chalk.red('Failed to switch Node version. Please try manually.'));
+      console.log(colors.error('Failed to switch Node version. Please try manually.'));
       process.exit(1);
     }
 
-    console.log(chalk.green('✓ Node version switched successfully\n'));
+    console.log(colors.success('✓ Node version switched successfully\n'));
     return;
   }
 
-  console.log(chalk.yellow('No compatible Node versions installed.\n'));
+  console.log(colors.warning('No compatible Node versions installed.\n'));
   const recommended = getRecommendedNodeVersion(nodeRequirement);
 
   if (!await confirm({ message: `Install Node.js v${recommended}?`, default: true })) {
-    console.log(chalk.red('Cannot proceed without compatible Node.js version.'));
+    console.log(colors.error('Cannot proceed without compatible Node.js version.'));
     process.exit(1);
   }
 
   if (!await installNodeVersion(recommended)) {
-    console.log(chalk.red('Failed to install Node version.'));
+    console.log(colors.error('Failed to install Node version.'));
     process.exit(1);
   }
 
-  console.log(chalk.green('✓ Node.js installed successfully\n'));
+  console.log(colors.success('✓ Node.js installed successfully\n'));
   await switchNodeVersion(recommended);
 }
 
@@ -341,7 +341,7 @@ async function installResolvedLibraries(resolvedLibraries, projectPath) {
   // Show adjusted versions
   const adjusted = resolvedLibraries.filter(lib => lib.adjusted);
   if (adjusted.length > 0) {
-    console.log(chalk.green('\n✓ Dynamically resolved compatible library versions:\n'));
+    console.log(colors.success('\n✓ Dynamically resolved compatible library versions:\n'));
     printObjectList(
       'Resolved Library Versions',
       adjusted.map(({ name, originalVersion, version, reason }) => ({
@@ -354,7 +354,7 @@ async function installResolvedLibraries(resolvedLibraries, projectPath) {
   // Show warnings
   const warnings = resolvedLibraries.filter(lib => lib.warning);
   if (warnings.length > 0) {
-    console.log(chalk.yellow('\n⚠️  Potential compatibility warnings:\n'));
+    console.log(colors.warning('\n⚠️  Potential compatibility warnings:\n'));
     printObjectList(
       'Compatibility Warnings',
       warnings.map(({ name, version, reason }) => ({
@@ -368,15 +368,15 @@ async function installResolvedLibraries(resolvedLibraries, projectPath) {
 
   // Production dependencies
   const prod = resolvedLibraries.filter(lib => !lib.isDev);
-  if (prod.length > 0) {
-    console.log(chalk.bold.cyan('\n📦 Installing production libraries…\n'));
+    if (prod.length > 0) {
+    console.log(colors.boldInfo('\n📦 Installing production libraries…\n'));
     await installPackages(prod.map(toSpec), projectPath);
   }
 
   // Dev dependencies
   const dev = resolvedLibraries.filter(lib => lib.isDev);
   if (dev.length > 0) {
-    console.log(chalk.bold.cyan('\n📦 Installing dev libraries…\n'));
+    console.log(colors.boldInfo('\n📦 Installing dev libraries…\n'));
     await installPackages(dev.map(toSpec), projectPath, true);
   }
 }
@@ -384,17 +384,17 @@ async function installResolvedLibraries(resolvedLibraries, projectPath) {
 // ── Success Message ─────────────────────────────────────────────────
 
 function displaySuccessMessage(projectName) {
-  const divider = chalk.gray('━'.repeat(50));
+  const divider = colors.muted('━'.repeat(50));
 
-  console.log(chalk.bold.green('\n✅ Project created successfully! 🎉\n'));
-  console.log(chalk.bold.cyan('📊 Next Steps:\n'));
+  console.log(colors.boldSuccess('\n✅ Project created successfully! 🎉\n'));
+  console.log(colors.boldInfo('📊 Next Steps:\n'));
   console.log(divider);
-  console.log(chalk.white('1. ') + chalk.cyan(`cd ${projectName}`));
-  console.log(chalk.white('2. ') + chalk.cyan('ng serve'));
-  console.log(chalk.white('3. ') + chalk.cyan('Open http://localhost:4200 in your browser'));
+  console.log(colors.white('1. ') + colors.info(`cd ${projectName}`));
+  console.log(colors.white('2. ') + colors.info('ng serve'));
+  console.log(colors.white('3. ') + colors.info('Open http://localhost:4200 in your browser'));
   console.log(divider);
 
-  console.log(chalk.bold.cyan('\n💡 Useful Commands:\n'));
+  console.log(colors.boldInfo('\n💡 Useful Commands:\n'));
   const cmds = [
     ['ng generate component <name>', 'Create a component'],
     ['ng generate service <name>', 'Create a service'],
@@ -403,8 +403,8 @@ function displaySuccessMessage(projectName) {
     ['ng help', 'Get more help'],
   ];
   for (const [cmd, desc] of cmds) {
-    console.log(`${chalk.gray(`  ${cmd.padEnd(34)}`)}${chalk.white(desc)}`);
+    console.log(`${colors.muted(`  ${cmd.padEnd(34)}`)}${colors.white(desc)}`);
   }
 
-  console.log(chalk.bold.green('\nHappy coding! 🚀\n'));
+  console.log(colors.boldSuccess('\nHappy coding! 🚀\n'));
 }

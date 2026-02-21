@@ -298,12 +298,6 @@ flowchart TD
     AB --> AC["Apply Configuration Presets"]
     AC --> AD["Display Success Message + Next Steps"]
     AD --> AE["End"]
-    
-    style A fill:#e1f5fe
-    style AE fill:#c8e6c9
-    style G fill:#fff3e0
-    style I fill:#ffebee
-    style M fill:#f3e5f5
 ```
 
 ---

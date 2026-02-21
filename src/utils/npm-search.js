@@ -1,5 +1,5 @@
 import axios from 'axios';
-import chalk from 'chalk';
+import colors from './colors.js';
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
 
@@ -399,7 +399,7 @@ export async function getNodeRequirementsForAngular(angularVersion) {
 
     return deriveNodeRequirement(major);
   } catch {
-    console.log(chalk.gray(
+    console.log(colors.muted(
       `Unable to fetch Node requirements, deriving from Angular ${major}…`
     ));
     return deriveNodeRequirement(major);
