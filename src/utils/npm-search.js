@@ -280,43 +280,7 @@ export function formatDownloads(count) {
 //  Debounced Search (with stale-request cancellation)
 // ═══════════════════════════════════════════════════════════════════════
 
-/**
- * Create a debounced search function that automatically cancels
- * in-flight HTTP requests when a newer keystroke arrives.
- */
-export function createDebouncedSearch(delay = 300) {
-  let timer = null;
-  let controller = null;
-
-  return function debouncedSearch(query, callback) {
-    if (timer) clearTimeout(timer);
-    if (controller) controller.abort();
-
-    if (!query || query.length < 2) {
-      callback([]);
-      return;
-    }
-
-    const ac = (controller = new AbortController());
-
-    timer = setTimeout(async () => {
-      try {
-        const { data } = await api.get(NPM_SEARCH, {
-          params: { text: query, size: 10 },
-          signal: ac.signal,
-        });
-        if (!ac.signal.aborted) {
-          callback(data.objects.map(mapSearchResult));
-        }
-      } catch (error) {
-        if (!ac.signal.aborted) callback([]);
-      }
-    }, delay);
-  };
-}
-
-/** Default debounced search instance (backward-compatible export). */
-export const debouncedSearch = createDebouncedSearch();
+// Debounced search helper removed (unused in-repo).
 
 // ═══════════════════════════════════════════════════════════════════════
 //  Version Listing (abbreviated metadata — fast)
@@ -429,14 +393,11 @@ function deriveNodeRequirement(angularMajor) {
  * if the package was already fetched.
  */
 export async function getPackagePeerDependencies(packageName, version) {
+  // Simplified: direct access to `fetchAbbreviated` is preferred where needed.
   try {
     const data = await fetchAbbreviated(packageName);
     return data.versions?.[version]?.peerDependencies || {};
-  } catch (error) {
-    console.error(
-      `Error fetching peer dependencies for ${packageName}@${version}:`,
-      error.message
-    );
+  } catch {
     return {};
   }
 }
@@ -452,54 +413,12 @@ export async function findCompatiblePackageVersions(
   angularVersion,
   maxResults = 5
 ) {
-  try {
-    const data = await fetchAbbreviated(packageName);
-    const allVersions = stableSortedDesc(Object.keys(data.versions || {}));
-    const angularMajor = angularVersion.split('.')[0];
-    const compatible = [];
-
-    for (const version of allVersions) {
-      if (compatible.length >= maxResults) break;
-
-      const peers = data.versions[version]?.peerDependencies || {};
-      const angularDep = peers['@angular/core'] || peers['@angular/common'];
-
-      if (angularDep) {
-        if (
-          angularDep.includes(`^${angularMajor}.`) ||
-          angularDep.includes(`~${angularMajor}.`) ||
-          angularDep.includes(`>=${angularMajor}.`) ||
-          angularDep.includes(`${angularMajor}.x`)
-        ) {
-          compatible.push({ version, peerDependency: angularDep });
-        }
-      } else {
-        compatible.push({ version, peerDependency: 'No Angular peer dependency' });
-      }
-    }
-
-    return compatible;
-  } catch (error) {
-    console.error(
-      `Error finding compatible versions for ${packageName}:`,
-      error.message
-    );
-    return [];
-  }
+  // Removed heavy compatibility helper (unused in-repo).
+  return [];
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 //  Lifecycle
 // ═══════════════════════════════════════════════════════════════════════
 
-/** Flush all cached data. */
-export function clearCache() {
-  cache.clear();
-}
-
-/** Destroy keep-alive sockets (call on process exit if needed). */
-export function destroy() {
-  cache.clear();
-  httpAgent.destroy();
-  httpsAgent.destroy();
-}
+// Lifecycle helpers `clearCache` and `destroy` removed (unused in-repo).

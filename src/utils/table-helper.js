@@ -104,11 +104,5 @@ export function printObjectList(title, data = [], cols = []) {
  * @param {string}   title  Section heading (optional)
  * @param {object[]} data   Row objects
  */
-export function printSimpleTable(title, data = []) {
-  if (!Array.isArray(data) || data.length === 0) {
-    console.log(colors.warning(`No ${title || 'items'} to display.`));
-    return;
-  }
-
-  printObjectList(title, data, Object.keys(data[0]));
-}
+// (Removed unused convenience wrapper `printSimpleTable` to reduce
+// exported API surface; use `printObjectList` instead.)

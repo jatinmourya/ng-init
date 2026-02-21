@@ -75,9 +75,9 @@ A comprehensive CLI application that automates Angular project initialization wi
 ### Advanced Features (100% Complete)
 
 #### 8. Pre-configured Project Templates (DISABLED)
- - **Location**: `src/templates/templates.js`
- - **Status**: Feature is disabled; `templates.js` has been retained for backward compatibility but
-   exports nothing. Users configure projects through the interactive prompts in `runner.js`.
+ - **Location**: `src/templates/templates.js` (removed)
+ - **Status**: Feature is disabled and the legacy `templates.js` has been removed from the codebase.
+   Projects are configured via interactive prompts in `runner.js`.
 
 #### 9. Interactive Library Search & Installation ✓
 - **Location**: `src/utils/prompt-handler.js` - `interactiveLibrarySearch()`
@@ -96,8 +96,7 @@ A comprehensive CLI application that automates Angular project initialization wi
 - **Features**:
   - `resolveLibraryVersionsAsync()` - Resolves compatible versions for all libraries
   - `findCompatibleLibraryVersion()` - Finds best compatible version from npm
-  - `isVersionCompatibleWithAngular()` - Checks peer dependencies against Angular version
-  - `getPackagePeerDependencies()` - Fetches peer deps from npm registry
+  - `isVersionCompatibleWithAngular()` - Checks peer dependency ranges against the selected Angular version
   - `getAllCompatibleVersions()` - Lists all compatible versions for a package
   - Package response caching (5-minute TTL)
   - Automatic major version matching for `@angular/*` and `@ngrx/*` packages
@@ -169,8 +168,7 @@ ng-init/
 │   │   ├── prompt-handler.js        # Interactive prompts
 │   │   ├── file-utils.js            # File operations & Git
 │   │   └── profile-manager.js       # Profile management
-│   └── templates/
-│       └── templates.js             # All templates, bundles, presets
+│   └── templates/ (removed)
 ├── build.js                          # Build script for production
 ├── package.json                      # Package configuration
 ├── README.md                         # Main documentation

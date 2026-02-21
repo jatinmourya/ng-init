@@ -294,12 +294,4 @@ export async function importProfile(filePath) {
   return ok;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-//  Lifecycle
-// ═══════════════════════════════════════════════════════════════════════
-
-/** Invalidate the in-memory cache (useful for testing). */
-export function clearCache() {
-  _cache = null;
-  _dirReady = null;
-}
+// Lifecycle helpers removed: `clearCache` was unused in-repo.

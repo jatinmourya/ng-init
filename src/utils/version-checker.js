@@ -181,14 +181,4 @@ export async function installNodeVersion(version) {
  * Compare two semantic versions.
  * @returns {-1 | 0 | 1}
  */
-export function compareVersions(v1, v2) {
-  return semver.compare(v1, v2);
-}
-
-/**
- * Check if a version satisfies a semver range.
- * @returns {boolean}
- */
-export function satisfiesVersion(version, range) {
-  return semver.satisfies(version, range);
-}
+// (Removed unused helpers `compareVersions` and `satisfiesVersion`)

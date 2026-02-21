@@ -390,52 +390,6 @@ async function resolveLibrary(lib, angularVersion) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-//  Legacy / Backward-Compatible Exports
-// ═══════════════════════════════════════════════════════════════════════
-
-/**
- * Check compatibility using a raw peer-dependency range string.
- * Kept for any remaining call sites that pass pre-fetched peer dep strings.
- */
-export function checkLibraryCompatibility(peerDependency, angularVersion) {
-  if (!peerDependency || peerDependency === 'No Angular peer dependency') {
-    return { compatible: true, reason: 'No Angular peer dependency specified' };
-  }
-
-  const ok = satisfiesSafe(angularVersion, peerDependency);
-  return {
-    compatible: ok,
-    reason: ok
-      ? `Angular ${angularVersion} satisfies peer dependency '${peerDependency}'`
-      : `Angular ${angularVersion} does not satisfy peer dependency '${peerDependency}'`,
-  };
-}
-
-/**
- * Synchronous fallback for library version resolution.
- * Only handles `@angular/` scoped packages — everything else gets "latest".
- *
- * @deprecated Prefer {@link resolveLibraryVersionsAsync} for accurate results.
- */
-export function resolveLibraryVersions(libraries, angularVersion) {
-  const major = angularVersion.split('.')[0];
-
-  return libraries.map(lib => {
-    const requested = lib.version || 'latest';
-
-    if (requested !== 'latest') {
-      return { ...lib, adjusted: false };
-    }
-
-    if (lib.name.startsWith('@angular/')) {
-      return {
-        ...lib,
-        version: `^${major}.0.0`,
-        originalVersion: requested,
-        adjusted: true,
-      };
-    }
-
-    return { ...lib, adjusted: false };
-  });
-}
+// (Legacy helpers removed: `checkLibraryCompatibility` and
+// `resolveLibraryVersions` were unused in the repository and
+// have been intentionally removed to reduce surface area.)

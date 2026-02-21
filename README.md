@@ -307,8 +307,7 @@ ng-init/
 │   │   ├── prompt-handler.js     # Interactive prompts
 │   │   ├── file-utils.js         # File operations
 │   │   └── profile-manager.js    # Profile management
-│   └── templates/             # Configuration templates (disabled)
-│       └── templates.js          # Template definitions (all features disabled)
+│   └── templates/             # Configuration templates (disabled/removed)
 ├── build.js                   # Build script for production
 ├── package.json
 └── README.md

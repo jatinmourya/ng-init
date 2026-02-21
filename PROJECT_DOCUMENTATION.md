@@ -249,7 +249,7 @@ src/
 │   ├── file-utils.js         # File operations
 │   └── profile-manager.js    # Profile management
 └── templates/             # Project templates
-    └── templates.js          # Template definitions
+  └── templates.js          # Template definitions (disabled/removed)
 ```
 
 ---

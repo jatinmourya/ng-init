@@ -12,8 +12,6 @@ const colors = {
   boldInfo: (s) => chalk.bold.hex('#17a2b8')(s),
   boldAccent: (s) => chalk.bold.hex('#6f42c1')(s),
   boldSuccess: (s) => chalk.bold.hex('#28a745')(s),
-  // expose raw chalk for advanced cases
-  raw: chalk,
   white: (s) => chalk.white(s),
 };
 
