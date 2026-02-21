@@ -1,6 +1,6 @@
 {
   "name": "@jatinmourya/ng-init",
-  "version": "1.2.13",
+  "version": "1.2.14",
   "description": "A comprehensive CLI tool to automate Angular project initialization with intelligent version management and prerequisite handling",
   "type": "module",
   "main": "./dist/cli.js",
